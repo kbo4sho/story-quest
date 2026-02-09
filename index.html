@@ -1250,6 +1250,8 @@ html, body {
     border-width: 1.5px;
   }
   .crystal-slot { width: 28px; height: 28px; }
+  .sound-toggle { width: 34px; height: 34px; }
+  .sound-toggle svg { width: 22px; height: 22px; }
 
   /* Scene content */
   .scene-content { padding-top: 48px; }
@@ -1749,6 +1751,36 @@ html, body {
   pointer-events: none;
   z-index: 3;
 }
+
+/* ═══════════════════════════════════════════
+   SOUND TOGGLE
+   ═══════════════════════════════════════════ */
+.sound-toggle {
+  background: rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  width: 40px; height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  flex-shrink: 0;
+}
+.sound-toggle:active {
+  transform: scale(0.9);
+}
+.sound-toggle:hover {
+  background: rgba(255,255,255,0.25);
+  border-color: rgba(255,255,255,0.5);
+}
+.sound-toggle.muted {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+}
 </style>
 </head>
 <body>
@@ -1764,6 +1796,18 @@ html, body {
       <div class="progress-dot" data-scene="4"></div>
       <div class="progress-dot" data-scene="5"></div>
     </div>
+    <button class="sound-toggle" id="sound-toggle" onclick="toggleMute()" aria-label="Toggle sound">
+      <svg viewBox="0 0 24 24" width="28" height="28" id="sound-icon-on">
+        <path d="M3 9v6h4l5 5V4L7 9H3z" fill="white"/>
+        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="white"/>
+        <path d="M19 12c0 3.53-2.04 6.58-5 8.03v2.21c4.01-1.82 6.84-5.79 6.84-10.24S18.01 3.58 14 1.76v2.22c2.96 1.46 5 4.5 5 8.02z" fill="white" opacity="0.6"/>
+      </svg>
+      <svg viewBox="0 0 24 24" width="28" height="28" id="sound-icon-off" style="display:none">
+        <path d="M3 9v6h4l5 5V4L7 9H3z" fill="white" opacity="0.4"/>
+        <line x1="18" y1="9" x2="24" y2="15" stroke="white" stroke-width="2" opacity="0.6"/>
+        <line x1="24" y1="9" x2="18" y2="15" stroke="white" stroke-width="2" opacity="0.6"/>
+      </svg>
+    </button>
     <div class="crystal-slot" id="crystal-slot">
       <svg viewBox="0 0 40 50" id="crystal-slot-svg">
         <defs>
@@ -3366,36 +3410,716 @@ const G = {
   transitioning: false,
 };
 
-// ── AUDIO ENGINE (Web Audio API) ──
+// ── AUDIO ENGINE (Web Audio API) — Full Sound System ──
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
+let masterGain;
+let sfxGain;
+let ambientGain;
+let isMuted = false;
+let currentAmbient = null;
+let ambientNodes = [];
+
 function ensureAudio() {
-  if (!audioCtx) audioCtx = new AudioCtx();
+  if (!audioCtx) {
+    audioCtx = new AudioCtx();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 1.0;
+    masterGain.connect(audioCtx.destination);
+    sfxGain = audioCtx.createGain();
+    sfxGain.gain.value = 0.7;
+    sfxGain.connect(masterGain);
+    ambientGain = audioCtx.createGain();
+    ambientGain.gain.value = 0.25;
+    ambientGain.connect(masterGain);
+  }
   if (audioCtx.state === 'suspended') audioCtx.resume();
 }
 
-function playTone(freq, dur, type = 'sine', vol = 0.15) {
+function toggleMute() {
+  isMuted = !isMuted;
+  const btn = document.getElementById('sound-toggle');
+  const iconOn = document.getElementById('sound-icon-on');
+  const iconOff = document.getElementById('sound-icon-off');
+  if (isMuted) {
+    btn.classList.add('muted');
+    iconOn.style.display = 'none';
+    iconOff.style.display = 'block';
+    if (masterGain) masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+  } else {
+    btn.classList.remove('muted');
+    iconOn.style.display = 'block';
+    iconOff.style.display = 'none';
+    ensureAudio();
+    if (masterGain) masterGain.gain.setTargetAtTime(1, audioCtx.currentTime, 0.05);
+  }
+}
+
+// ── Basic tone player ──
+function playTone(freq, dur, type = 'sine', vol = 0.15, dest) {
+  if (isMuted) return;
   ensureAudio();
+  const t = audioCtx.currentTime;
   const o = audioCtx.createOscillator();
   const g = audioCtx.createGain();
   o.type = type;
   o.frequency.value = freq;
-  g.gain.value = vol;
-  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
-  o.connect(g); g.connect(audioCtx.destination);
-  o.start(); o.stop(audioCtx.currentTime + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g);
+  g.connect(dest || sfxGain);
+  o.start(t);
+  o.stop(t + dur);
 }
 
+// ── Create noise buffer ──
+function createNoiseBuffer(duration, type) {
+  ensureAudio();
+  const sr = audioCtx.sampleRate;
+  const len = sr * duration;
+  const buf = audioCtx.createBuffer(1, len, sr);
+  const data = buf.getChannelData(0);
+  if (type === 'pink') {
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for (let i = 0; i < len; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.99886*b0 + white*0.0555179;
+      b1 = 0.99332*b1 + white*0.0750759;
+      b2 = 0.96900*b2 + white*0.1538520;
+      b3 = 0.86650*b3 + white*0.3104856;
+      b4 = 0.55000*b4 + white*0.5329522;
+      b5 = -0.7616*b5 - white*0.0168980;
+      data[i] = (b0+b1+b2+b3+b4+b5+b6+white*0.5362)*0.11;
+      b6 = white*0.115926;
+    }
+  } else if (type === 'brown') {
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      const white = Math.random() * 2 - 1;
+      data[i] = (last + (0.02 * white)) / 1.02;
+      last = data[i];
+      data[i] *= 3.5;
+    }
+  } else {
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  }
+  return buf;
+}
+
+// ── SFX: Tap/click feedback ──
+function playClick() {
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(800, t);
+  o.frequency.exponentialRampToValueAtTime(500, t + 0.04);
+  g.gain.setValueAtTime(0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+  o.connect(g); g.connect(sfxGain);
+  o.start(t); o.stop(t + 0.06);
+}
+
+// ── SFX: Button hover ──
+function playHover() {
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.value = 600;
+  g.gain.setValueAtTime(0.03, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+  o.connect(g); g.connect(sfxGain);
+  o.start(t); o.stop(t + 0.04);
+}
+
+// ── SFX: Button press ──
+function playPress() {
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(400, t);
+  o.frequency.exponentialRampToValueAtTime(300, t + 0.08);
+  g.gain.setValueAtTime(0.08, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+  o.connect(g); g.connect(sfxGain);
+  o.start(t); o.stop(t + 0.1);
+}
+
+// ── SFX: Correct answer sparkle chime ──
 function playCorrect() {
-  playTone(523, 0.12); setTimeout(() => playTone(659, 0.12), 100);
-  setTimeout(() => playTone(784, 0.25), 200);
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const notes = [523.25, 659.25, 783.99, 1046.5];
+  notes.forEach((freq, i) => {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    const start = t + i * 0.08;
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(0.12, start + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
+    o.connect(g); g.connect(sfxGain);
+    o.start(start); o.stop(start + 0.3);
+    // Add harmonic shimmer
+    const o2 = audioCtx.createOscillator();
+    const g2 = audioCtx.createGain();
+    o2.type = 'sine';
+    o2.frequency.value = freq * 2;
+    g2.gain.setValueAtTime(0, start);
+    g2.gain.linearRampToValueAtTime(0.04, start + 0.02);
+    g2.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
+    o2.connect(g2); g2.connect(sfxGain);
+    o2.start(start); o2.stop(start + 0.2);
+  });
 }
-function playWrong() { playTone(220, 0.3, 'triangle', 0.1); }
-function playChime(freq = 800) { playTone(freq, 0.5, 'sine', 0.1); }
+
+// ── SFX: Incorrect answer — gentle boop ──
+function playWrong() {
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(300, t);
+  o.frequency.exponentialRampToValueAtTime(180, t + 0.25);
+  g.gain.setValueAtTime(0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  o.connect(g); g.connect(sfxGain);
+  o.start(t); o.stop(t + 0.3);
+}
+
+// ── SFX: Crystal chime ──
+function playChime(freq = 800) {
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  // Fundamental
+  const o1 = audioCtx.createOscillator();
+  const g1 = audioCtx.createGain();
+  o1.type = 'sine';
+  o1.frequency.value = freq;
+  g1.gain.setValueAtTime(0.12, t);
+  g1.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  o1.connect(g1); g1.connect(sfxGain);
+  o1.start(t); o1.stop(t + 0.6);
+  // Overtone
+  const o2 = audioCtx.createOscillator();
+  const g2 = audioCtx.createGain();
+  o2.type = 'sine';
+  o2.frequency.value = freq * 2.5;
+  g2.gain.setValueAtTime(0.04, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  o2.connect(g2); g2.connect(sfxGain);
+  o2.start(t); o2.stop(t + 0.4);
+  // Sub
+  const o3 = audioCtx.createOscillator();
+  const g3 = audioCtx.createGain();
+  o3.type = 'sine';
+  o3.frequency.value = freq * 0.5;
+  g3.gain.setValueAtTime(0.06, t);
+  g3.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+  o3.connect(g3); g3.connect(sfxGain);
+  o3.start(t); o3.stop(t + 0.5);
+}
+
+// ── SFX: Crystal cave tones (per color) ──
+function playCrystalTone(color) {
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const toneMap = {
+    red:    { freq: 261.63, type: 'sine' },     // C4
+    blue:   { freq: 329.63, type: 'sine' },     // E4
+    purple: { freq: 392.00, type: 'sine' },     // G4
+    green:  { freq: 440.00, type: 'triangle' }, // A4
+    gold:   { freq: 523.25, type: 'sine' },     // C5
+  };
+  const tone = toneMap[color] || toneMap.gold;
+  // Main bell tone
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = tone.type;
+  o.frequency.value = tone.freq;
+  g.gain.setValueAtTime(0.15, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+  o.connect(g); g.connect(sfxGain);
+  o.start(t); o.stop(t + 1.2);
+  // Shimmer overtone
+  const o2 = audioCtx.createOscillator();
+  const g2 = audioCtx.createGain();
+  o2.type = 'sine';
+  o2.frequency.value = tone.freq * 3;
+  g2.gain.setValueAtTime(0.04, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+  o2.connect(g2); g2.connect(sfxGain);
+  o2.start(t); o2.stop(t + 0.8);
+  // Detuned twin for richness
+  const o3 = audioCtx.createOscillator();
+  const g3 = audioCtx.createGain();
+  o3.type = 'sine';
+  o3.frequency.value = tone.freq * 1.005;
+  g3.gain.setValueAtTime(0.08, t);
+  g3.gain.exponentialRampToValueAtTime(0.001, t + 1.0);
+  o3.connect(g3); g3.connect(sfxGain);
+  o3.start(t); o3.stop(t + 1.0);
+}
+
+// ── SFX: Hatch creak + magical ──
+function playHatchOpen() {
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  // Creak: filtered noise sweep
+  const noiseBuf = createNoiseBuffer(0.6, 'white');
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(200, t);
+  bp.frequency.exponentialRampToValueAtTime(800, t + 0.4);
+  bp.Q.value = 8;
+  const ng = audioCtx.createGain();
+  ng.gain.setValueAtTime(0.06, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+  noise.connect(bp); bp.connect(ng); ng.connect(sfxGain);
+  noise.start(t); noise.stop(t + 0.5);
+  // Magical chime sweep
+  const freqs = [400, 600, 800, 1200, 1600];
+  freqs.forEach((f, i) => {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = f;
+    const start = t + 0.15 + i * 0.06;
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(0.06, start + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
+    o.connect(g); g.connect(sfxGain);
+    o.start(start); o.stop(start + 0.35);
+  });
+}
+
+// ── SFX: Celebration fanfare ──
 function playCelebration() {
-  [523,659,784,1047].forEach((f,i) => setTimeout(() => playTone(f, 0.2, 'sine', 0.12), i * 120));
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  // Trumpet-like fanfare: C E G C' E' with sawtooth
+  const fanfare = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+  fanfare.forEach((freq, i) => {
+    const start = t + i * 0.12;
+    // Main voice
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.value = freq;
+    const lp = audioCtx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2000;
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(0.06, start + 0.03);
+    g.gain.setValueAtTime(0.06, start + 0.15);
+    g.gain.exponentialRampToValueAtTime(0.001, start + 0.4);
+    o.connect(lp); lp.connect(g); g.connect(sfxGain);
+    o.start(start); o.stop(start + 0.4);
+    // Sine reinforcement
+    const o2 = audioCtx.createOscillator();
+    const g2 = audioCtx.createGain();
+    o2.type = 'sine';
+    o2.frequency.value = freq;
+    g2.gain.setValueAtTime(0, start);
+    g2.gain.linearRampToValueAtTime(0.08, start + 0.02);
+    g2.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
+    o2.connect(g2); g2.connect(sfxGain);
+    o2.start(start); o2.stop(start + 0.35);
+  });
 }
-function playClick() { playTone(600, 0.06, 'sine', 0.08); }
+
+// ── SFX: Scene transition whoosh ──
+function playWhoosh() {
+  if (isMuted) return;
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const buf = createNoiseBuffer(0.4, 'pink');
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(300, t);
+  bp.frequency.exponentialRampToValueAtTime(2000, t + 0.15);
+  bp.frequency.exponentialRampToValueAtTime(400, t + 0.35);
+  bp.Q.value = 1.5;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.12, t + 0.1);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  src.connect(bp); bp.connect(g); g.connect(sfxGain);
+  src.start(t); src.stop(t + 0.4);
+}
+
+// ══════════════════════════════════════
+// AMBIENT AUDIO SYSTEM
+// ══════════════════════════════════════
+
+function stopAmbient() {
+  ambientNodes.forEach(n => {
+    try {
+      if (n.gain) n.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.3);
+      setTimeout(() => { try { n.source.stop(); } catch(e){} }, 1000);
+    } catch(e) {}
+  });
+  ambientNodes = [];
+  currentAmbient = null;
+}
+
+function startAmbient(scene) {
+  if (!audioCtx || isMuted) { currentAmbient = scene; return; }
+  if (currentAmbient === scene) return;
+  stopAmbient();
+  currentAmbient = scene;
+  ensureAudio();
+
+  const ambientFns = {
+    meadow: startMeadowAmbient,
+    river: startRiverAmbient,
+    forest: startForestAmbient,
+    cave: startCaveAmbient,
+    finale: startFinaleAmbient,
+  };
+  if (ambientFns[scene]) ambientFns[scene]();
+}
+
+function addAmbientNode(source, gain) {
+  ambientNodes.push({ source, gain });
+}
+
+// ── Meadow: wind + birds ──
+function startMeadowAmbient() {
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  // Gentle wind (filtered brown noise)
+  const windBuf = createNoiseBuffer(4, 'brown');
+  const wind = audioCtx.createBufferSource();
+  wind.buffer = windBuf;
+  wind.loop = true;
+  const wf = audioCtx.createBiquadFilter();
+  wf.type = 'lowpass';
+  wf.frequency.value = 400;
+  const wg = audioCtx.createGain();
+  wg.gain.value = 0.15;
+  wind.connect(wf); wf.connect(wg); wg.connect(ambientGain);
+  wind.start(t);
+  addAmbientNode(wind, wg);
+
+  // Bird chirps (periodic random)
+  function scheduleBird() {
+    if (currentAmbient !== 'meadow') return;
+    ensureAudio();
+    const now = audioCtx.currentTime;
+    const freq = 1800 + Math.random() * 1200;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq, now);
+    o.frequency.linearRampToValueAtTime(freq + 400 + Math.random()*300, now + 0.05);
+    o.frequency.linearRampToValueAtTime(freq - 100, now + 0.1);
+    o.frequency.linearRampToValueAtTime(freq + 200, now + 0.15);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.04, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    o.connect(g); g.connect(ambientGain);
+    o.start(now); o.stop(now + 0.2);
+    // Second chirp
+    if (Math.random() > 0.4) {
+      const o2 = audioCtx.createOscillator();
+      const g2 = audioCtx.createGain();
+      o2.type = 'sine';
+      const f2 = freq + 200;
+      o2.frequency.setValueAtTime(f2, now + 0.2);
+      o2.frequency.linearRampToValueAtTime(f2 + 300, now + 0.25);
+      o2.frequency.linearRampToValueAtTime(f2, now + 0.3);
+      g2.gain.setValueAtTime(0, now + 0.2);
+      g2.gain.linearRampToValueAtTime(0.03, now + 0.22);
+      g2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      o2.connect(g2); g2.connect(ambientGain);
+      o2.start(now + 0.2); o2.stop(now + 0.35);
+    }
+    setTimeout(scheduleBird, 2000 + Math.random() * 4000);
+  }
+  setTimeout(scheduleBird, 500);
+}
+
+// ── River: rushing water ──
+function startRiverAmbient() {
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  // Water rush (filtered white noise)
+  const waterBuf = createNoiseBuffer(3, 'white');
+  const water = audioCtx.createBufferSource();
+  water.buffer = waterBuf;
+  water.loop = true;
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 800;
+  bp.Q.value = 0.5;
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 3000;
+  const wg = audioCtx.createGain();
+  wg.gain.value = 0.12;
+  water.connect(bp); bp.connect(lp); lp.connect(wg); wg.connect(ambientGain);
+  water.start(t);
+  addAmbientNode(water, wg);
+
+  // Gentle babble modulation
+  const lfo = audioCtx.createOscillator();
+  const lfoGain = audioCtx.createGain();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.3;
+  lfoGain.gain.value = 200;
+  lfo.connect(lfoGain);
+  lfoGain.connect(bp.frequency);
+  lfo.start(t);
+  addAmbientNode(lfo, lfoGain);
+
+  // Occasional splash
+  function scheduleSplash() {
+    if (currentAmbient !== 'river') return;
+    ensureAudio();
+    const now = audioCtx.currentTime;
+    const buf = createNoiseBuffer(0.15, 'white');
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2000;
+    const sg = audioCtx.createGain();
+    sg.gain.setValueAtTime(0, now);
+    sg.gain.linearRampToValueAtTime(0.03, now + 0.02);
+    sg.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    src.connect(hp); hp.connect(sg); sg.connect(ambientGain);
+    src.start(now); src.stop(now + 0.15);
+    setTimeout(scheduleSplash, 3000 + Math.random() * 5000);
+  }
+  setTimeout(scheduleSplash, 1500);
+}
+
+// ── Forest: crickets + owl hoots ──
+function startForestAmbient() {
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  // Cricket chorus (high-freq oscillation)
+  const cricketBuf = createNoiseBuffer(2, 'white');
+  const cricket = audioCtx.createBufferSource();
+  cricket.buffer = cricketBuf;
+  cricket.loop = true;
+  const hp = audioCtx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 5000;
+  const cg = audioCtx.createGain();
+  cg.gain.value = 0.04;
+  // AM modulation for chirpy effect
+  const am = audioCtx.createOscillator();
+  const amGain = audioCtx.createGain();
+  am.type = 'square';
+  am.frequency.value = 12;
+  amGain.gain.value = 0.04;
+  cricket.connect(hp); hp.connect(cg); cg.connect(ambientGain);
+  am.connect(amGain); amGain.connect(cg.gain);
+  cricket.start(t);
+  am.start(t);
+  addAmbientNode(cricket, cg);
+  addAmbientNode(am, amGain);
+
+  // Wind rustle
+  const windBuf = createNoiseBuffer(3, 'brown');
+  const wind = audioCtx.createBufferSource();
+  wind.buffer = windBuf;
+  wind.loop = true;
+  const wlp = audioCtx.createBiquadFilter();
+  wlp.type = 'lowpass';
+  wlp.frequency.value = 300;
+  const wg = audioCtx.createGain();
+  wg.gain.value = 0.08;
+  wind.connect(wlp); wlp.connect(wg); wg.connect(ambientGain);
+  wind.start(t);
+  addAmbientNode(wind, wg);
+
+  // Occasional owl hoot
+  function scheduleOwl() {
+    if (currentAmbient !== 'forest') return;
+    ensureAudio();
+    const now = audioCtx.currentTime;
+    // Two-note hoot: "hoo... hoo-hoo"
+    const notes = [
+      { freq: 340, start: 0, dur: 0.35 },
+      { freq: 300, start: 0.5, dur: 0.2 },
+      { freq: 320, start: 0.75, dur: 0.3 },
+    ];
+    notes.forEach(n => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.value = n.freq;
+      const s = now + n.start;
+      g.gain.setValueAtTime(0, s);
+      g.gain.linearRampToValueAtTime(0.05, s + 0.04);
+      g.gain.setValueAtTime(0.05, s + n.dur * 0.6);
+      g.gain.exponentialRampToValueAtTime(0.001, s + n.dur);
+      o.connect(g); g.connect(ambientGain);
+      o.start(s); o.stop(s + n.dur);
+    });
+    setTimeout(scheduleOwl, 6000 + Math.random() * 8000);
+  }
+  setTimeout(scheduleOwl, 2000);
+}
+
+// ── Cave: echoes + drips ──
+function startCaveAmbient() {
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  // Deep drone
+  const drone = audioCtx.createOscillator();
+  const dg = audioCtx.createGain();
+  drone.type = 'sine';
+  drone.frequency.value = 55;
+  dg.gain.value = 0.08;
+  const droneLfo = audioCtx.createOscillator();
+  const droneLfoG = audioCtx.createGain();
+  droneLfo.type = 'sine';
+  droneLfo.frequency.value = 0.15;
+  droneLfoG.gain.value = 5;
+  droneLfo.connect(droneLfoG); droneLfoG.connect(drone.frequency);
+  drone.connect(dg); dg.connect(ambientGain);
+  drone.start(t); droneLfo.start(t);
+  addAmbientNode(drone, dg);
+  addAmbientNode(droneLfo, droneLfoG);
+
+  // Drips
+  function scheduleDrip() {
+    if (currentAmbient !== 'cave') return;
+    ensureAudio();
+    const now = audioCtx.currentTime;
+    const freq = 1200 + Math.random() * 800;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq, now);
+    o.frequency.exponentialRampToValueAtTime(freq * 0.4, now + 0.15);
+    g.gain.setValueAtTime(0.06, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    // Add reverb-like decay via delayed echoes
+    const delay = audioCtx.createDelay(0.5);
+    delay.delayTime.value = 0.15;
+    const fbk = audioCtx.createGain();
+    fbk.gain.value = 0.3;
+    o.connect(g); g.connect(ambientGain);
+    g.connect(delay); delay.connect(fbk); fbk.connect(delay); delay.connect(ambientGain);
+    o.start(now); o.stop(now + 0.2);
+    // Clean up delay feedback
+    setTimeout(() => { try { fbk.gain.value = 0; } catch(e){} }, 1500);
+    setTimeout(scheduleDrip, 1500 + Math.random() * 3000);
+  }
+  setTimeout(scheduleDrip, 800);
+
+  // Soft echo pad
+  const echoBuf = createNoiseBuffer(4, 'brown');
+  const echo = audioCtx.createBufferSource();
+  echo.buffer = echoBuf;
+  echo.loop = true;
+  const elp = audioCtx.createBiquadFilter();
+  elp.type = 'lowpass';
+  elp.frequency.value = 200;
+  const eg = audioCtx.createGain();
+  eg.gain.value = 0.06;
+  echo.connect(elp); elp.connect(eg); eg.connect(ambientGain);
+  echo.start(t);
+  addAmbientNode(echo, eg);
+}
+
+// ── Finale clearing: warm tones ──
+function startFinaleAmbient() {
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  // Warm pad chord: C major (C3, E3, G3)
+  const padFreqs = [130.81, 164.81, 196.00];
+  padFreqs.forEach(freq => {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.value = 0.05;
+    // Gentle vibrato
+    const vib = audioCtx.createOscillator();
+    const vibG = audioCtx.createGain();
+    vib.type = 'sine';
+    vib.frequency.value = 0.2 + Math.random() * 0.15;
+    vibG.gain.value = 1.5;
+    vib.connect(vibG); vibG.connect(o.frequency);
+    o.connect(g); g.connect(ambientGain);
+    o.start(t); vib.start(t);
+    addAmbientNode(o, g);
+    addAmbientNode(vib, vibG);
+  });
+
+  // Gentle wind
+  const windBuf = createNoiseBuffer(4, 'pink');
+  const wind = audioCtx.createBufferSource();
+  wind.buffer = windBuf;
+  wind.loop = true;
+  const wlp = audioCtx.createBiquadFilter();
+  wlp.type = 'lowpass';
+  wlp.frequency.value = 600;
+  const wg = audioCtx.createGain();
+  wg.gain.value = 0.06;
+  wind.connect(wlp); wlp.connect(wg); wg.connect(ambientGain);
+  wind.start(t);
+  addAmbientNode(wind, wg);
+
+  // Occasional warm sparkle
+  function scheduleSparkle() {
+    if (currentAmbient !== 'finale') return;
+    ensureAudio();
+    const now = audioCtx.currentTime;
+    const freq = 800 + Math.random() * 600;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.03, now + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    o.connect(g); g.connect(ambientGain);
+    o.start(now); o.stop(now + 0.5);
+    setTimeout(scheduleSparkle, 3000 + Math.random() * 5000);
+  }
+  setTimeout(scheduleSparkle, 1000);
+}
+
+// ── Attach hover/press sounds to interactive elements ──
+function attachButtonSounds() {
+  const selectors = '.choice-btn, .answer-btn, .letter-card, .word-image-card, .door-frame, .crystal-option, .sequence-card, .sort-item, .start-btn, .replay-btn, .pattern-item:not(.mystery)';
+  document.querySelectorAll(selectors).forEach(el => {
+    if (el._hasSoundEvents) return;
+    el._hasSoundEvents = true;
+    el.addEventListener('pointerenter', () => playHover());
+    el.addEventListener('pointerdown', () => playPress());
+  });
+}
+
+// Re-attach sounds periodically (for dynamically generated content)
+setInterval(attachButtonSounds, 2000);
 
 // ── NARRATIVES ──
 const NARRATIVES = {
@@ -3546,6 +4270,11 @@ function showScene(sceneId) {
   if (G.transitioning) return;
   G.transitioning = true;
   
+  // Play whoosh on scene transition (not first scene)
+  if (document.querySelector('.scene.active')) {
+    playWhoosh();
+  }
+  
   // Parallax exit: shift current scene background slightly before fade
   const currentActive = document.querySelector('.scene.active');
   if (currentActive) {
@@ -3583,6 +4312,21 @@ function showScene(sceneId) {
       el.classList.add('active');
     }
     updateProgressDots(sceneId);
+    
+    // Start ambient audio for this scene
+    const ambientMap = {
+      'scene-1': 'meadow',
+      'scene-2a': 'river',
+      'scene-2b': 'meadow',
+      'scene-3': 'forest',
+      'scene-4': 'cave',
+      'scene-5': 'finale',
+      'end-screen': 'finale',
+    };
+    if (ambientMap[sceneId]) {
+      startAmbient(ambientMap[sceneId]);
+    }
+    
     G.transitioning = false;
   }, 200);
 }
@@ -3602,6 +4346,7 @@ function updateProgressDots(sceneId) {
 function startGame() {
   ensureAudio();
   playClick();
+  attachButtonSounds();
   const title = document.getElementById('title-screen');
   title.classList.add('hidden');
   setTimeout(() => {
@@ -3618,7 +4363,7 @@ function openHatch() {
   if (G.hatchOpened) return;
   G.hatchOpened = true;
   ensureAudio();
-  playCelebration();
+  playHatchOpen();
 
   // Animate hatch
   const lid = document.getElementById('hatch-lid');
@@ -3982,8 +4727,7 @@ function forestSuccess() {
 // ── SCENE 4: CRYSTAL CAVE ──
 function pickCrystal(color, el) {
   ensureAudio();
-  const freqMap = { red: 523, blue: 659, purple: 784, green: 880, gold: 1047 };
-  playChime(freqMap[color] || 700);
+  playCrystalTone(color);
 
   document.querySelectorAll('.crystal-option').forEach(c => c.classList.remove('picked'));
   el.classList.add('picked');
@@ -4345,6 +5089,7 @@ function showEndScreen() {
 function replayGame() {
   ensureAudio();
   playClick();
+  stopAmbient();
 
   // Reset all state
   G.currentScene = 0;
@@ -4513,6 +5258,8 @@ function randomCheer() {
 document.addEventListener('DOMContentLoaded', () => {
   // Title screen is visible by default; game waits for startGame()
   document.querySelectorAll('.tap-hint').forEach(h => h.style.display = 'none');
+  // Attach hover/press sounds to initial buttons
+  attachButtonSounds();
 });
 </script>
 </body>
