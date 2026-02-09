@@ -1210,19 +1210,332 @@ html, body {
 /* ═══════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════ */
-@media (max-width: 600px) {
-  .narrative-text { font-size: 18px; }
-  .challenge-question { font-size: 20px; }
-  .choice-btn { font-size: 17px; padding: 12px 20px; min-width: 160px; }
-  .title-logo { font-size: 32px; }
-  .door-frame { width: 100px; min-height: 130px; }
-  .end-title { font-size: 28px; }
+
+/* ── Tablet-ish portrait & small screens (≤768px) ── */
+@media (max-width: 768px) {
+  .narrative-text { font-size: 19px; }
+  .challenge-question { font-size: 21px; }
+  .title-logo { font-size: 34px; }
+  .title-episode { font-size: 18px; margin-bottom: 28px; }
+  .end-title { font-size: 30px; }
+
+  .door-frame { width: 110px; min-height: 135px; }
+  .path-doors { gap: 20px; }
+  .crystal-picker { gap: 14px; }
+
+  .sort-zones { gap: 14px; }
+  .sort-zone { min-width: 100px; min-height: 100px; padding: 10px; }
+
+  .owl-container { right: 4%; top: 12%; }
+  .troll-container { right: 4%; }
 }
 
+/* ── Phone portrait (≤480px) ── */
+@media (max-width: 480px) {
+  /* Top bar */
+  #top-bar {
+    height: 48px;
+    padding: 6px 12px;
+  }
+  .episode-title {
+    font-size: 14px;
+    max-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .progress-dots { gap: 5px; }
+  .progress-dot {
+    width: 10px; height: 10px;
+    border-width: 1.5px;
+  }
+  .crystal-slot { width: 28px; height: 28px; }
+
+  /* Scene content */
+  .scene-content { padding-top: 48px; }
+
+  /* Narrative box — sit at bottom, no overlap */
+  .narrative-box {
+    min-height: 100px;
+    max-height: 180px;
+    padding: 20px 16px 16px;
+  }
+  .narrative-text {
+    font-size: 16px;
+    line-height: 1.45;
+    max-width: 100%;
+  }
+  .tap-hint { font-size: 12px; margin-top: 4px; }
+
+  /* Choices — vertical stack in portrait */
+  .choices-container {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    margin-top: 12px;
+  }
+  .choice-btn {
+    font-size: 16px;
+    padding: 14px 20px;
+    min-width: 85%;
+    max-width: 320px;
+    min-height: 64px;
+  }
+  .choice-btn .icon { font-size: 22px; }
+
+  /* Title screen */
+  .title-logo { font-size: 28px; }
+  .title-episode { font-size: 16px; margin-bottom: 24px; }
+  .start-btn {
+    font-size: 22px;
+    padding: 14px 36px;
+    border-radius: 22px;
+  }
+  .title-characters { gap: 12px; margin-top: 20px; }
+  .title-characters svg {
+    max-width: 80px;
+    height: auto;
+  }
+
+  /* Characters row */
+  .characters-row { gap: 10px; margin-top: 10px; }
+  .characters-row svg {
+    max-width: 90px;
+    height: auto;
+  }
+
+  /* Challenge panels — tighter on phones */
+  .challenge-panel,
+  .phonics-panel {
+    padding: 16px 14px;
+    margin: 12px 8px;
+    border-radius: 18px;
+    max-width: 100%;
+    width: calc(100% - 16px);
+  }
+  .challenge-question { font-size: 18px; margin-bottom: 14px; }
+  .feedback-text { font-size: 18px; }
+
+  /* Math answer buttons — ensure ≥64px touch */
+  .answer-btn {
+    width: 68px; height: 68px;
+    border-radius: 16px;
+    font-size: 26px;
+  }
+  .answer-options { gap: 10px; }
+
+  /* Plank icons */
+  .plank-icon { width: 34px; height: 42px; }
+  .challenge-visual { gap: 6px; margin-bottom: 14px; }
+
+  /* Phonics / letter cards — keep ≥64px */
+  .letter-card {
+    width: 64px; height: 64px;
+    font-size: 24px;
+    border-radius: 14px;
+  }
+  .letter-grid, .word-grid { gap: 8px; margin: 12px 0; }
+
+  .word-image-card {
+    width: 85px; height: 85px;
+    border-radius: 14px;
+    font-size: 12px;
+  }
+  .word-image-card svg { width: 40px; height: 40px; }
+
+  .word-display {
+    font-size: 28px;
+    letter-spacing: 3px;
+    padding: 10px 18px;
+    border-radius: 14px;
+  }
+
+  /* Bridge structure */
+  .bridge-structure { width: 90%; max-width: none; bottom: 25%; }
+
+  /* Crystal cave doors */
+  .path-doors {
+    gap: 14px;
+    padding: 0 12px;
+    flex-wrap: wrap;
+  }
+  .door-frame {
+    width: 90px;
+    min-height: 115px;
+    padding: 12px;
+    border-radius: 45px 45px 8px 8px;
+  }
+  .door-frame .door-symbol { font-size: 30px; }
+  .door-frame .door-label { font-size: 12px; }
+
+  /* Crystal picker */
+  .crystal-picker { gap: 12px; margin: 14px 12px; }
+  .crystal-option { width: 56px; height: 72px; }
+
+  /* Finale — patterns & sequence */
+  .pattern-area { gap: 8px; margin: 12px 0; }
+  .pattern-item {
+    width: 52px; height: 52px;
+    font-size: 26px;
+    border-radius: 12px;
+  }
+  .pattern-item.mystery { font-size: 20px; }
+
+  .sequence-cards { gap: 8px; margin: 12px 0; }
+  .sequence-card {
+    width: 72px; height: 72px;
+    min-height: 64px;
+    border-radius: 14px;
+    padding: 6px;
+    font-size: 11px;
+  }
+  .sequence-card .card-icon { font-size: 24px; }
+
+  .sort-zones {
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 0 8px;
+  }
+  .sort-zone {
+    min-width: 90px;
+    min-height: 90px;
+    padding: 8px;
+    border-radius: 12px;
+  }
+  .sort-zone-label { font-size: 13px; }
+  .sort-item {
+    width: 52px; height: 52px;
+    border-radius: 12px;
+    font-size: 24px;
+  }
+
+  /* Wonder items (meadow) */
+  .wonder-items-bar {
+    top: 54px;
+    right: 12px;
+    gap: 6px;
+  }
+  .wonder-slot {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    font-size: 18px;
+  }
+
+  /* Discoverable items — generous touch targets */
+  .discoverable {
+    min-width: 64px;
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .discoverable svg { min-width: 48px; min-height: 48px; }
+
+  /* Hatch */
+  .hatch { width: 120px; height: 75px; }
+  .hatch-container { margin-top: -20px; }
+  .hatch-glow { width: 160px; height: 100px; top: -15px; left: -20px; }
+  .hatch-tap-ring { width: 140px; height: 90px; top: -10px; left: -10px; }
+
+  /* Owl & troll positioning */
+  .owl-container {
+    position: absolute;
+    top: 8%;
+    right: 2%;
+    transform: scale(0.7);
+    transform-origin: top right;
+  }
+  .troll-container {
+    right: 2%;
+    bottom: 45%;
+    transform: scale(0.8);
+    transform-origin: bottom right;
+  }
+
+  /* Pip hint bubble */
+  .pip-hint {
+    bottom: 190px;
+    font-size: 15px;
+    padding: 10px 16px;
+    max-width: 260px;
+    border-radius: 16px;
+  }
+
+  /* End screen */
+  .end-screen { padding: 16px; }
+  .end-title { font-size: 24px; }
+  .end-subtitle { font-size: 15px; margin-bottom: 16px; }
+  .stars-display { gap: 8px; margin-bottom: 16px; }
+  .star { font-size: 36px; }
+  .end-stats { padding: 14px 20px; border-radius: 16px; }
+  .stat-line { font-size: 15px; gap: 8px; }
+  .stat-icon { font-size: 18px; }
+  .cliffhanger-box {
+    padding: 12px 16px;
+    max-width: 300px;
+    border-radius: 12px;
+  }
+  .cliffhanger-text { font-size: 14px; }
+  .replay-btn {
+    font-size: 18px;
+    padding: 12px 30px;
+    border-radius: 16px;
+  }
+}
+
+/* ── Tiny phones (≤375px) ── */
+@media (max-width: 375px) {
+  .episode-title { font-size: 12px; max-width: 90px; }
+  .progress-dot { width: 8px; height: 8px; }
+  .narrative-text { font-size: 15px; }
+  .choice-btn { font-size: 15px; padding: 12px 16px; }
+  .title-logo { font-size: 24px; }
+  .start-btn { font-size: 20px; padding: 12px 30px; }
+  .challenge-question { font-size: 16px; }
+  .answer-btn { width: 64px; height: 64px; font-size: 24px; }
+  .letter-card { width: 58px; height: 58px; font-size: 22px; }
+  .word-display { font-size: 24px; letter-spacing: 2px; }
+  .door-frame { width: 80px; min-height: 105px; }
+  .door-frame .door-symbol { font-size: 26px; }
+  .pattern-item { width: 46px; height: 46px; font-size: 22px; }
+  .sequence-card { width: 64px; height: 64px; }
+  .sort-zone { min-width: 80px; min-height: 80px; }
+  .sort-item { width: 48px; height: 48px; font-size: 22px; }
+  .end-title { font-size: 22px; }
+}
+
+/* ── Short landscape (e.g. phone rotated) ── */
 @media (max-height: 500px) {
-  .narrative-box { min-height: 80px; padding: 16px; }
-  .narrative-text { font-size: 16px; }
-  #top-bar { height: 44px; }
+  .narrative-box { min-height: 70px; max-height: 120px; padding: 14px 16px 10px; }
+  .narrative-text { font-size: 15px; }
+  #top-bar { height: 40px; padding: 4px 12px; }
+  .episode-title { font-size: 14px; }
+  .progress-dot { width: 10px; height: 10px; }
+  .scene-content { padding-top: 40px; }
+  .challenge-panel, .phonics-panel { padding: 12px; margin: 8px; }
+  .challenge-question { font-size: 18px; }
+  .choice-btn { min-height: 48px; padding: 8px 16px; font-size: 15px; }
+  .start-btn { padding: 10px 30px; font-size: 20px; }
+  .title-logo { font-size: 28px; }
+  .title-characters { margin-top: 12px; }
+}
+
+/* ── Portrait orientation — force vertical choices ── */
+@media (orientation: portrait) and (max-width: 600px) {
+  .choices-container {
+    flex-direction: column;
+    align-items: center;
+  }
+  .choice-btn {
+    width: 90%;
+    max-width: 320px;
+  }
+  .path-doors {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }
 
 /* ═══════════════════════════════════════════
