@@ -1,0 +1,4206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Story Quest — The Whispering Woods</title>
+<style>
+/* ═══════════════════════════════════════════
+   FONTS & RESET
+   ═══════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;700;800&display=swap');
+
+*, *::before, *::after {
+  margin: 0; padding: 0; box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: 'Baloo 2', 'Nunito', system-ui, sans-serif;
+  background: #1a1a2e;
+  touch-action: manipulation;
+}
+
+/* ═══════════════════════════════════════════
+   GAME CONTAINER
+   ═══════════════════════════════════════════ */
+#game {
+  position: relative;
+  width: 100%; height: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════
+   TOP BAR
+   ═══════════════════════════════════════════ */
+#top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px;
+  z-index: 100;
+  background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, transparent 100%);
+}
+
+.episode-title {
+  color: #FFD700;
+  font-size: 18px;
+  font-weight: 700;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.7);
+  letter-spacing: 0.5px;
+}
+
+.progress-dots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.progress-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  border: 2px solid rgba(255,255,255,0.5);
+  transition: all 0.4s ease;
+}
+
+.progress-dot.active {
+  background: #FFD700;
+  border-color: #FFD700;
+  box-shadow: 0 0 8px rgba(255,215,0,0.6);
+}
+
+.progress-dot.completed {
+  background: #66BB6A;
+  border-color: #66BB6A;
+}
+
+.crystal-slot {
+  width: 36px; height: 36px;
+  position: relative;
+}
+
+.crystal-slot svg {
+  width: 100%; height: 100%;
+  opacity: 0.3;
+  transition: opacity 0.5s;
+}
+
+.crystal-slot.has-crystal svg {
+  opacity: 1;
+  filter: drop-shadow(0 0 6px currentColor);
+  animation: crystalPulse 2s ease-in-out infinite;
+}
+
+@keyframes crystalPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* ═══════════════════════════════════════════
+   SCENES (shared)
+   ═══════════════════════════════════════════ */
+.scene {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+
+.scene.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.scene-bg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.scene-bg svg.bg-art {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+}
+
+.scene-content {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding-top: 60px;
+}
+
+/* ═══════════════════════════════════════════
+   NARRATIVE TEXT BOX
+   ═══════════════════════════════════════════ */
+.narrative-box {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  min-height: 120px;
+  max-height: 200px;
+  background: linear-gradient(0deg, rgba(15,15,30,0.95) 0%, rgba(15,15,30,0.9) 70%, rgba(15,15,30,0.6) 90%, transparent 100%);
+  padding: 30px 24px 24px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.narrative-text {
+  color: #F5F5DC;
+  font-size: 22px;
+  line-height: 1.5;
+  text-align: center;
+  max-width: 700px;
+  min-height: 44px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.narrative-text .word {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  margin-right: 0.3em;
+}
+
+.narrative-text .word.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tap-hint {
+  color: rgba(255,255,255,0.4);
+  font-size: 14px;
+  margin-top: 8px;
+  animation: tapPulse 2s ease-in-out infinite;
+}
+
+@keyframes tapPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* ═══════════════════════════════════════════
+   CHOICE BUTTONS
+   ═══════════════════════════════════════════ */
+.choices-container {
+  display: flex;
+  gap: 16px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 0 20px;
+}
+
+.choice-btn {
+  background: linear-gradient(135deg, rgba(255,152,0,0.9), rgba(245,124,0,0.9));
+  border: 3px solid rgba(255,183,77,0.8);
+  border-radius: 20px;
+  color: white;
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  padding: 16px 28px;
+  min-width: 200px;
+  min-height: 64px;
+  cursor: pointer;
+  text-shadow: 0 2px 3px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  animation: choiceBounceIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.choice-btn:nth-child(2) { animation-delay: 0.1s; }
+.choice-btn:nth-child(3) { animation-delay: 0.2s; }
+
+.choice-btn.secondary {
+  background: linear-gradient(135deg, rgba(66,165,245,0.9), rgba(30,136,229,0.9));
+  border-color: rgba(100,181,246,0.8);
+}
+
+.choice-btn.purple {
+  background: linear-gradient(135deg, rgba(171,71,188,0.9), rgba(142,36,170,0.9));
+  border-color: rgba(206,147,216,0.8);
+}
+
+.choice-btn.green {
+  background: linear-gradient(135deg, rgba(102,187,106,0.9), rgba(67,160,71,0.9));
+  border-color: rgba(129,199,132,0.8);
+}
+
+.choice-btn:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.choice-btn .icon {
+  font-size: 28px;
+}
+
+@keyframes choiceBounceIn {
+  0% { opacity: 0; transform: scale(0.5) translateY(20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ═══════════════════════════════════════════
+   SCENE CHARACTERS
+   ═══════════════════════════════════════════ */
+.character-img {
+  image-rendering: optimizeQuality;
+}
+
+.characters-row {
+  display: flex;
+  gap: 20px;
+  align-items: flex-end;
+  margin-top: 20px;
+  opacity: 0;
+  transition: opacity 0.8s ease 0.3s;
+}
+
+.characters-row.visible {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════
+   HATCH
+   ═══════════════════════════════════════════ */
+.hatch-container {
+  position: relative;
+  cursor: pointer;
+  margin-top: -40px;
+}
+
+.hatch {
+  width: 160px; height: 100px;
+  position: relative;
+  transition: transform 0.3s ease;
+}
+
+.hatch-glow {
+  position: absolute;
+  width: 200px; height: 140px;
+  top: -20px; left: -20px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255,215,0,0.4) 0%, transparent 70%);
+  animation: hatchGlow 2s ease-in-out infinite;
+}
+
+@keyframes hatchGlow {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+.hatch-tap-ring {
+  position: absolute;
+  width: 180px; height: 120px;
+  top: -10px; left: -10px;
+  border: 3px dashed rgba(255,215,0,0.5);
+  border-radius: 20px;
+  animation: tapRing 1.5s ease-in-out infinite;
+}
+
+@keyframes tapRing {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════
+   SCENE 2A: BRIDGE
+   ═══════════════════════════════════════════ */
+.bridge-structure {
+  position: absolute;
+  bottom: 30%; left: 50%;
+  transform: translateX(-50%);
+  width: 500px; max-width: 90%;
+}
+
+.challenge-panel {
+  background: rgba(255,255,255,0.95);
+  border-radius: 24px;
+  padding: 24px;
+  margin: 20px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  text-align: center;
+  z-index: 20;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.challenge-question {
+  font-size: 24px;
+  color: #2E2E2E;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.challenge-visual {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.plank-icon {
+  width: 40px; height: 50px;
+  background: linear-gradient(180deg, #A1887F, #795548);
+  border-radius: 6px;
+  border: 2px solid #5D4037;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plank-icon::after {
+  content: '';
+  width: 25px; height: 3px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 2px;
+}
+
+.answer-options {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.answer-btn {
+  width: 72px; height: 72px;
+  border-radius: 18px;
+  border: 3px solid #E0E0E0;
+  background: white;
+  font-size: 28px;
+  font-weight: 800;
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  color: #2E2E2E;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+}
+
+.answer-btn:active {
+  transform: scale(0.92);
+}
+
+.answer-btn.correct {
+  background: #66BB6A;
+  border-color: #43A047;
+  color: white;
+  animation: correctPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.answer-btn.incorrect {
+  animation: incorrectShake 0.5s ease;
+  border-color: #EF5350;
+}
+
+@keyframes correctPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+@keyframes incorrectShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+
+.feedback-text {
+  font-size: 22px;
+  font-weight: 700;
+  margin-top: 16px;
+  min-height: 32px;
+}
+
+.feedback-text.success { color: #43A047; }
+.feedback-text.hint { color: #FF9800; }
+
+.troll-container {
+  position: absolute;
+  bottom: 50%; right: 8%;
+  z-index: 15;
+}
+
+/* ═══════════════════════════════════════════
+   SCENE 2B: MEADOW DISCOVERY
+   ═══════════════════════════════════════════ */
+.wonder-items-bar {
+  position: absolute;
+  top: 70px; right: 20px;
+  display: flex;
+  gap: 10px;
+  z-index: 30;
+}
+
+.wonder-slot {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  border: 3px dashed rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.wonder-slot.collected {
+  border-style: solid;
+  border-color: #FFD700;
+  background: rgba(255,215,0,0.2);
+  animation: collectPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes collectPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+.discoverable {
+  position: absolute;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  z-index: 15;
+}
+
+.discoverable:active {
+  transform: scale(1.1);
+}
+
+.discoverable.found {
+  animation: itemFloat 1s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes itemFloat {
+  0% { transform: scale(1.2); opacity: 1; }
+  50% { transform: scale(1.4) translateY(-30px); opacity: 0.8; }
+  100% { transform: scale(0.5) translateY(-60px); opacity: 0; }
+}
+
+.butterfly {
+  position: absolute;
+  z-index: 5;
+  animation: butterflyFly 8s ease-in-out infinite;
+}
+
+@keyframes butterflyFly {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(40px, -30px) rotate(10deg); }
+  50% { transform: translate(-20px, -50px) rotate(-5deg); }
+  75% { transform: translate(30px, -20px) rotate(8deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+/* ═══════════════════════════════════════════
+   SCENE 3: WORD FOREST
+   ═══════════════════════════════════════════ */
+.phonics-panel {
+  background: rgba(255,255,255,0.95);
+  border-radius: 24px;
+  padding: 24px;
+  max-width: 550px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  text-align: center;
+  z-index: 20;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.letter-grid, .word-grid {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 16px 0;
+}
+
+.letter-card {
+  width: 68px; height: 68px;
+  border-radius: 16px;
+  border: 3px solid #E0E0E0;
+  background: white;
+  font-size: 28px;
+  font-weight: 800;
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  color: #2E2E2E;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.letter-card.selected {
+  border-color: #42A5F5;
+  background: #E3F2FD;
+  transform: scale(1.05);
+}
+
+.letter-card.matched {
+  border-color: #66BB6A;
+  background: #E8F5E9;
+  color: #43A047;
+}
+
+.letter-card.wrong {
+  animation: incorrectShake 0.5s ease;
+  border-color: #EF5350;
+}
+
+.word-image-card {
+  width: 100px; height: 100px;
+  border-radius: 16px;
+  border: 3px solid #E0E0E0;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.word-image-card svg {
+  width: 50px; height: 50px;
+}
+
+.word-image-card:active {
+  transform: scale(0.95);
+}
+
+.word-image-card.correct {
+  border-color: #66BB6A;
+  background: #E8F5E9;
+}
+
+.word-display {
+  font-size: 36px;
+  font-weight: 800;
+  color: #7B1FA2;
+  letter-spacing: 4px;
+  margin: 16px 0;
+  padding: 12px 24px;
+  background: #F3E5F9;
+  border-radius: 16px;
+  display: inline-block;
+}
+
+.owl-container {
+  position: absolute;
+  top: 15%;
+  right: 10%;
+  z-index: 15;
+}
+
+/* ═══════════════════════════════════════════
+   SCENE 4: CRYSTAL CAVE
+   ═══════════════════════════════════════════ */
+.cave-sparkle {
+  position: absolute;
+  width: 4px; height: 4px;
+  background: white;
+  border-radius: 50%;
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.path-doors {
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+  margin-top: 20px;
+  flex-wrap: wrap;
+  padding: 0 20px;
+}
+
+.door-frame {
+  width: 120px;
+  min-height: 150px;
+  border-radius: 60px 60px 8px 8px;
+  border: 4px solid #5D4037;
+  background: linear-gradient(180deg, #3E2723, #4E342E);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.door-frame:active {
+  transform: scale(0.95);
+}
+
+.door-frame .door-symbol {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.door-frame .door-label {
+  color: #FFCC80;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.door-frame.glow-star {
+  box-shadow: 0 0 20px rgba(255,193,7,0.4), 0 4px 16px rgba(0,0,0,0.4);
+  border-color: #FFC107;
+}
+
+.door-frame.glow-book {
+  box-shadow: 0 0 20px rgba(156,39,176,0.4), 0 4px 16px rgba(0,0,0,0.4);
+  border-color: #9C27B0;
+}
+
+.door-frame.glow-leaf {
+  box-shadow: 0 0 20px rgba(76,175,80,0.4), 0 4px 16px rgba(0,0,0,0.4);
+  border-color: #4CAF50;
+}
+
+.crystal-picker {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin: 20px;
+  flex-wrap: wrap;
+}
+
+.crystal-option {
+  width: 70px; height: 90px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.crystal-option:active {
+  transform: scale(1.1);
+}
+
+.crystal-option.picked {
+  transform: scale(1.15);
+}
+
+.crystal-option.picked::after {
+  content: '✓';
+  position: absolute;
+  bottom: -5px; right: -5px;
+  width: 24px; height: 24px;
+  background: #66BB6A;
+  border-radius: 50%;
+  color: white;
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ═══════════════════════════════════════════
+   SCENE 5: FINALE
+   ═══════════════════════════════════════════ */
+.finale-hatch {
+  margin-top: 20px;
+  position: relative;
+}
+
+.lock-icon {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 40px;
+  z-index: 5;
+  animation: lockBounce 1s ease-in-out infinite;
+}
+
+@keyframes lockBounce {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.1); }
+}
+
+.pattern-area {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
+.pattern-item {
+  width: 64px; height: 64px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  border: 3px solid #E0E0E0;
+  background: white;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.pattern-item.mystery {
+  background: #F3E5F9;
+  border-color: #CE93D8;
+  border-style: dashed;
+  font-size: 24px;
+  color: #9C27B0;
+}
+
+.sequence-cards {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.sequence-card {
+  width: 90px; height: 90px;
+  border-radius: 16px;
+  border: 3px solid #E0E0E0;
+  background: white;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #666;
+  padding: 8px;
+  text-align: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.sequence-card .card-icon {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
+.sequence-card.placed {
+  border-color: #42A5F5;
+  background: #E3F2FD;
+}
+
+.sequence-card:active { transform: scale(0.95); }
+
+.sort-zones {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin: 16px 0;
+}
+
+.sort-zone {
+  min-width: 120px;
+  min-height: 120px;
+  border: 3px dashed #E0E0E0;
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-zone-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: #666;
+}
+
+.sort-item {
+  width: 60px; height: 60px;
+  border-radius: 14px;
+  border: 3px solid #E0E0E0;
+  background: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.sort-item:active { transform: scale(0.95); }
+.sort-item.sorted { border-color: #66BB6A; background: #E8F5E9; pointer-events: none; }
+
+/* ═══════════════════════════════════════════
+   END SCREEN
+   ═══════════════════════════════════════════ */
+.end-screen {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.8s ease;
+  padding: 20px;
+}
+
+.end-screen.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.end-title {
+  font-size: 36px;
+  font-weight: 800;
+  color: #FFD700;
+  text-shadow: 0 2px 10px rgba(255,215,0,0.5);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.end-subtitle {
+  font-size: 18px;
+  color: #B0BEC5;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.stars-display {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.star {
+  font-size: 48px;
+  opacity: 0.2;
+  transition: all 0.5s ease;
+  filter: grayscale(1);
+}
+
+.star.earned {
+  opacity: 1;
+  filter: none;
+  animation: starEarned 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes starEarned {
+  0% { transform: scale(0) rotate(-30deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.end-stats {
+  background: rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 20px 30px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.stat-line {
+  color: #E0E0E0;
+  font-size: 18px;
+  margin: 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.stat-icon {
+  font-size: 22px;
+}
+
+.cliffhanger-box {
+  background: linear-gradient(135deg, rgba(255,152,0,0.2), rgba(255,87,34,0.2));
+  border: 2px solid rgba(255,152,0,0.4);
+  border-radius: 16px;
+  padding: 16px 24px;
+  max-width: 400px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.cliffhanger-text {
+  color: #FFCC80;
+  font-size: 16px;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.replay-btn {
+  background: linear-gradient(135deg, #FF9800, #F57C00);
+  border: 3px solid #FFB74D;
+  border-radius: 20px;
+  color: white;
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  padding: 16px 40px;
+  cursor: pointer;
+  text-shadow: 0 2px 3px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 15px rgba(255,152,0,0.4);
+  transition: transform 0.15s ease;
+}
+
+.replay-btn:active {
+  transform: scale(0.95);
+}
+
+/* ═══════════════════════════════════════════
+   CELEBRATION EFFECTS
+   ═══════════════════════════════════════════ */
+.confetti-container {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 300;
+  overflow: hidden;
+}
+
+.confetti {
+  position: absolute;
+  width: 10px; height: 10px;
+  top: -10px;
+  animation: confettiFall 3s ease-in forwards;
+}
+
+@keyframes confettiFall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+.sparkle-burst {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.sparkle-particle {
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #FFD700;
+  animation: sparkleBurst 0.8s ease-out forwards;
+}
+
+@keyframes sparkleBurst {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════
+   PIP HINT BUBBLE
+   ═══════════════════════════════════════════ */
+.pip-hint {
+  position: fixed;
+  bottom: 220px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(232,245,233,0.95);
+  border: 3px solid #66BB6A;
+  border-radius: 20px;
+  padding: 12px 20px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #2E7D32;
+  max-width: 300px;
+  text-align: center;
+  z-index: 150;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.pip-hint.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-5px);
+}
+
+.pip-hint::after {
+  content: '🐸';
+  position: absolute;
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 22px;
+}
+
+/* ═══════════════════════════════════════════
+   LOADING / TITLE
+   ═══════════════════════════════════════════ */
+#title-screen {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  transition: opacity 0.8s ease;
+  padding: 20px;
+  overflow: hidden;
+}
+
+#title-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.title-bg-art {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+}
+
+.title-logo {
+  font-size: 42px;
+  font-weight: 800;
+  color: #FFD700;
+  text-shadow: 0 3px 15px rgba(255,215,0,0.5), 0 0 40px rgba(255,215,0,0.2);
+  margin-bottom: 8px;
+  text-align: center;
+  position: relative;
+  z-index: 2;
+}
+
+.title-episode {
+  font-size: 22px;
+  color: #E0E0E0;
+  margin-bottom: 40px;
+  font-style: italic;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  position: relative;
+  z-index: 2;
+}
+
+.start-btn {
+  background: linear-gradient(135deg, #FF9800, #F57C00);
+  border: 4px solid #FFB74D;
+  border-radius: 28px;
+  color: white;
+  font-family: 'Baloo 2', system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  padding: 18px 50px;
+  cursor: pointer;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  box-shadow: 0 6px 20px rgba(255,152,0,0.5);
+  animation: startPulse 2s ease-in-out infinite;
+  transition: transform 0.15s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.start-btn:active {
+  transform: scale(0.95);
+  animation: none;
+}
+
+@keyframes startPulse {
+  0%, 100% { box-shadow: 0 6px 20px rgba(255,152,0,0.5); }
+  50% { box-shadow: 0 6px 30px rgba(255,152,0,0.8), 0 0 50px rgba(255,152,0,0.3); }
+}
+
+.title-characters {
+  margin-top: 30px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-end;
+  position: relative;
+  z-index: 2;
+}
+
+.floating-cloud {
+  position: absolute;
+  z-index: 3;
+  opacity: 0.7;
+}
+
+.floating-cloud.c1 { animation: cloudDrift 25s linear infinite; }
+.floating-cloud.c2 { animation: cloudDrift 35s linear infinite; animation-delay: -12s; }
+.floating-cloud.c3 { animation: cloudDrift 30s linear infinite; animation-delay: -20s; }
+
+@keyframes cloudDrift {
+  0% { transform: translateX(-120px); }
+  100% { transform: translateX(calc(100vw + 120px)); }
+}
+
+.firefly {
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #FFD700;
+  box-shadow: 0 0 8px 2px rgba(255,215,0,0.6);
+  animation: fireflyFloat 4s ease-in-out infinite;
+  z-index: 4;
+}
+
+@keyframes fireflyFloat {
+  0%, 100% { opacity: 0.3; transform: translate(0, 0); }
+  25% { opacity: 1; transform: translate(15px, -20px); }
+  50% { opacity: 0.6; transform: translate(-10px, -30px); }
+  75% { opacity: 1; transform: translate(20px, -15px); }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .narrative-text { font-size: 18px; }
+  .challenge-question { font-size: 20px; }
+  .choice-btn { font-size: 17px; padding: 12px 20px; min-width: 160px; }
+  .title-logo { font-size: 32px; }
+  .door-frame { width: 100px; min-height: 130px; }
+  .end-title { font-size: 28px; }
+}
+
+@media (max-height: 500px) {
+  .narrative-box { min-height: 80px; padding: 16px; }
+  .narrative-text { font-size: 16px; }
+  #top-bar { height: 44px; }
+}
+
+/* ═══════════════════════════════════════════
+   AMBIENT ANIMATIONS
+   ═══════════════════════════════════════════ */
+
+/* -- Sway / breeze -- */
+@keyframes sway {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+@keyframes sway-slow {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
+}
+@keyframes sway-flower {
+  0%, 100% { transform: rotate(-3deg) translateY(0); }
+  50% { transform: rotate(3deg) translateY(-2px); }
+}
+
+/* -- Cloud drift -- */
+@keyframes cloud-drift {
+  0% { transform: translateX(-160px); }
+  100% { transform: translateX(calc(100vw + 160px)); }
+}
+
+/* -- Pulse / glow -- */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+@keyframes pulse-glow-soft {
+  0%, 100% { opacity: 0.3; filter: brightness(1); }
+  50% { opacity: 0.7; filter: brightness(1.3); }
+}
+@keyframes crystal-inner-glow {
+  0%, 100% { opacity: 0.7; filter: brightness(1) drop-shadow(0 0 4px currentColor); }
+  50% { opacity: 1; filter: brightness(1.4) drop-shadow(0 0 12px currentColor); }
+}
+
+/* -- Breathe (characters) -- */
+@keyframes breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.015); }
+}
+@keyframes breathe-origin-bottom {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.015); }
+}
+
+/* -- Blink -- */
+@keyframes blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+
+/* -- Frog bob -- */
+@keyframes frog-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes throat-pulse {
+  0%, 70%, 100% { transform: scaleY(1) scaleX(1); }
+  80% { transform: scaleY(1.15) scaleX(1.08); }
+}
+
+/* -- Float up (particles) -- */
+@keyframes float-up {
+  0% { transform: translateY(0) scale(1); opacity: 0.7; }
+  100% { transform: translateY(-200px) scale(0.4); opacity: 0; }
+}
+@keyframes float-up-slow {
+  0% { transform: translateY(0) translateX(0) scale(1); opacity: 0.6; }
+  50% { transform: translateY(-100px) translateX(15px) scale(0.7); opacity: 0.4; }
+  100% { transform: translateY(-220px) translateX(-10px) scale(0.3); opacity: 0; }
+}
+
+/* -- Pollen / dandelion drift -- */
+@keyframes pollen-drift {
+  0% { transform: translate(0, 0) scale(1); opacity: 0; }
+  10% { opacity: 0.7; }
+  50% { transform: translate(40px, -80px) scale(0.8); opacity: 0.5; }
+  90% { opacity: 0.2; }
+  100% { transform: translate(80px, -180px) scale(0.4); opacity: 0; }
+}
+
+/* -- Water flow -- */
+@keyframes water-flow {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-200px); }
+}
+
+/* -- Leaf fall -- */
+@keyframes leaf-fall {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.7; }
+  50% { transform: translate(30px, 120px) rotate(180deg); opacity: 0.5; }
+  90% { opacity: 0.2; }
+  100% { transform: translate(-10px, 280px) rotate(360deg); opacity: 0; }
+}
+
+/* -- Water drip -- */
+@keyframes water-drip {
+  0%, 80% { transform: translateY(0) scaleY(1); opacity: 0; }
+  85% { transform: translateY(0) scaleY(1); opacity: 0.6; }
+  100% { transform: translateY(40px) scaleY(1.5); opacity: 0; }
+}
+
+/* -- Color shift for cave -- */
+@keyframes cave-color-shift {
+  0%, 100% { fill: #16213e; }
+  33% { fill: #1a1a3e; }
+  66% { fill: #0f3460; }
+}
+
+/* -- Sunset color shift -- */
+@keyframes sunset-shift {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.5; }
+}
+
+/* -- Book glow -- */
+@keyframes book-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(255,202,40,0.3)); }
+  50% { filter: drop-shadow(0 0 8px rgba(255,202,40,0.7)); }
+}
+
+/* -- Light ray shift -- */
+@keyframes ray-shift {
+  0%, 100% { opacity: 0.4; transform: skewX(0deg); }
+  50% { opacity: 0.7; transform: skewX(2deg); }
+}
+
+/* -- Particle classes -- */
+.ambient-particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 3;
+}
+.pollen-particle {
+  width: 4px; height: 4px;
+  background: rgba(255,255,255,0.7);
+  animation: pollen-drift 8s ease-in-out infinite;
+}
+.warm-particle {
+  width: 3px; height: 3px;
+  background: rgba(255,215,0,0.5);
+  animation: float-up-slow 6s ease-in-out infinite;
+}
+.leaf-particle {
+  width: 6px; height: 4px;
+  background: #66BB6A;
+  border-radius: 50% 0 50% 0;
+  animation: leaf-fall 7s ease-in-out infinite;
+}
+.drip-particle {
+  width: 2px; height: 6px;
+  background: rgba(100,200,255,0.5);
+  border-radius: 50%;
+  animation: water-drip 4s ease-in infinite;
+}
+
+/* -- Animated cloud wrapper -- */
+.scene-cloud-drift {
+  animation: cloud-drift 40s linear infinite;
+  will-change: transform;
+}
+.scene-cloud-drift.c2 {
+  animation-duration: 55s;
+  animation-delay: -20s;
+}
+.scene-cloud-drift.c3 {
+  animation-duration: 48s;
+  animation-delay: -35s;
+}
+
+/* -- SVG sway groups -- */
+.svg-sway {
+  animation: sway 4s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+.svg-sway-slow {
+  animation: sway-slow 6s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+.svg-sway-flower {
+  animation: sway-flower 3.5s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+/* -- Firefly enhanced -- */
+.firefly-enhanced {
+  position: absolute;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #FFD700;
+  box-shadow: 0 0 8px 3px rgba(255,215,0,0.6);
+  animation: fireflyFloat 5s ease-in-out infinite, pulse-glow 3s ease-in-out infinite;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* -- Sparkle enhanced (cave) -- */
+.cave-sparkle-drift {
+  position: absolute;
+  width: 3px; height: 3px;
+  background: white;
+  border-radius: 50%;
+  animation: sparkle 2.5s ease-in-out infinite, pollen-drift 10s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 3;
+}
+</style>
+</head>
+<body>
+
+<div id="game">
+  <!-- TOP BAR -->
+  <div id="top-bar">
+    <div class="episode-title">The Whispering Woods</div>
+    <div class="progress-dots">
+      <div class="progress-dot" data-scene="1"></div>
+      <div class="progress-dot" data-scene="2"></div>
+      <div class="progress-dot" data-scene="3"></div>
+      <div class="progress-dot" data-scene="4"></div>
+      <div class="progress-dot" data-scene="5"></div>
+    </div>
+    <div class="crystal-slot" id="crystal-slot">
+      <svg viewBox="0 0 40 50" id="crystal-slot-svg">
+        <defs>
+          <linearGradient id="cs-shine" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="white" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="white" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <polygon points="20,2 35,18 28,48 12,48 5,18" fill="rgba(255,255,255,0.3)" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
+        <polygon points="20,4 33,18 20,16" fill="url(#cs-shine)" opacity="0.3"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════
+       TITLE SCREEN
+       ═════════════════════════════════════ -->
+  <div id="title-screen">
+    <svg class="title-bg-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="tg-sun" cx="50%" cy="25%" r="45%">
+          <stop offset="0%" stop-color="#FFF9C4"/>
+          <stop offset="40%" stop-color="#FFD54F" stop-opacity="0.4"/>
+          <stop offset="100%" stop-color="#87CEEB" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="tg-hatchGlow" cx="50%" cy="70%" r="20%">
+          <stop offset="0%" stop-color="#FFD700" stop-opacity="0.6"/>
+          <stop offset="50%" stop-color="#FFA000" stop-opacity="0.2"/>
+          <stop offset="100%" stop-color="transparent"/>
+        </radialGradient>
+        <linearGradient id="tg-sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#1a1a3e"/>
+          <stop offset="20%" stop-color="#2d3a6e"/>
+          <stop offset="50%" stop-color="#5c7fb8"/>
+          <stop offset="70%" stop-color="#87CEEB"/>
+          <stop offset="100%" stop-color="#B2EBF2"/>
+        </linearGradient>
+        <linearGradient id="tg-grass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#66BB6A"/>
+          <stop offset="100%" stop-color="#2E7D32"/>
+        </linearGradient>
+      </defs>
+      <!-- Sky -->
+      <rect width="1600" height="1000" fill="url(#tg-sky)"/>
+      <!-- Stars -->
+      <g opacity="0.6">
+        <circle cx="200" cy="60" r="2" fill="white"/><circle cx="400" cy="100" r="1.5" fill="white" opacity="0.7"/>
+        <circle cx="600" cy="40" r="2" fill="white"/><circle cx="1000" cy="80" r="1.5" fill="white" opacity="0.5"/>
+        <circle cx="1200" cy="50" r="2" fill="white"/><circle cx="1400" cy="90" r="1.5" fill="white" opacity="0.7"/>
+        <circle cx="300" cy="150" r="1" fill="white" opacity="0.4"/><circle cx="900" cy="120" r="1" fill="white" opacity="0.5"/>
+        <circle cx="750" cy="30" r="1.5" fill="white" opacity="0.6"/><circle cx="1100" cy="70" r="1" fill="white" opacity="0.4"/>
+      </g>
+      <!-- Moon -->
+      <circle cx="1300" cy="140" r="35" fill="#FFF9C4" opacity="0.8"/>
+      <circle cx="1310" cy="130" r="30" fill="#2d3a6e" opacity="0.6"/>
+      <!-- Sun glow -->
+      <rect width="1600" height="1000" fill="url(#tg-sun)" opacity="0.3"/>
+      <!-- Far rolling hills with trees -->
+      <ellipse cx="400" cy="600" rx="600" ry="120" fill="#7CB342" opacity="0.5"/>
+      <ellipse cx="1200" cy="580" rx="500" ry="100" fill="#689F38" opacity="0.5"/>
+      <!-- Distant trees on far hills -->
+      <g opacity="0.4">
+        <path d="M200,540 L210,490 L220,540Z" fill="#558B2F"/><path d="M280,530 L292,470 L304,530Z" fill="#33691E"/>
+        <path d="M1100,520 L1112,460 L1124,520Z" fill="#558B2F"/><path d="M1300,530 L1310,480 L1320,530Z" fill="#33691E"/>
+      </g>
+      <!-- Mid hills -->
+      <ellipse cx="800" cy="650" rx="900" ry="150" fill="#66BB6A"/>
+      <ellipse cx="300" cy="680" rx="500" ry="120" fill="#4CAF50"/>
+      <ellipse cx="1300" cy="670" rx="500" ry="130" fill="#43A047"/>
+      <!-- Main meadow ground -->
+      <rect x="0" y="650" width="1600" height="350" fill="url(#tg-grass)"/>
+      <!-- Hatch glow on ground -->
+      <rect width="1600" height="1000" fill="url(#tg-hatchGlow)"/>
+      <!-- Detailed wildflowers with petals -->
+      <g opacity="0.85">
+        <!-- Multi-petal flowers -->
+        <g transform="translate(200,700)">
+          <line x1="0" y1="0" x2="0" y2="30" stroke="#2E7D32" stroke-width="2.5"/>
+          <ellipse cx="-6" cy="-5" rx="5" ry="8" fill="#F06292" transform="rotate(-30 -6 -5)"/>
+          <ellipse cx="6" cy="-5" rx="5" ry="8" fill="#F06292" transform="rotate(30 6 -5)"/>
+          <ellipse cx="0" cy="-10" rx="5" ry="8" fill="#EC407A"/>
+          <ellipse cx="-5" cy="3" rx="4" ry="7" fill="#F48FB1" transform="rotate(-60 -5 3)"/>
+          <ellipse cx="5" cy="3" rx="4" ry="7" fill="#F48FB1" transform="rotate(60 5 3)"/>
+          <circle cx="0" cy="-2" r="4" fill="#FFD54F"/>
+        </g>
+        <g transform="translate(350,680)">
+          <line x1="0" y1="0" x2="0" y2="25" stroke="#2E7D32" stroke-width="2"/>
+          <ellipse cx="-5" cy="-4" rx="4" ry="7" fill="#BA68C8" transform="rotate(-25 -5 -4)"/>
+          <ellipse cx="5" cy="-4" rx="4" ry="7" fill="#BA68C8" transform="rotate(25 5 -4)"/>
+          <ellipse cx="0" cy="-8" rx="4" ry="7" fill="#AB47BC"/>
+          <circle cx="0" cy="-2" r="3" fill="#FFF176"/>
+        </g>
+        <g transform="translate(500,710)">
+          <line x1="0" y1="0" x2="0" y2="28" stroke="#2E7D32" stroke-width="2.5"/>
+          <ellipse cx="-6" cy="-5" rx="5" ry="9" fill="#FFB74D" transform="rotate(-30 -6 -5)"/>
+          <ellipse cx="6" cy="-5" rx="5" ry="9" fill="#FFB74D" transform="rotate(30 6 -5)"/>
+          <ellipse cx="0" cy="-10" rx="5" ry="8" fill="#FFA726"/>
+          <circle cx="0" cy="-3" r="4" fill="#5D4037"/>
+        </g>
+        <g transform="translate(680,690)">
+          <line x1="0" y1="0" x2="0" y2="25" stroke="#2E7D32" stroke-width="2"/>
+          <circle cx="-5" cy="-6" r="5" fill="#EF5350"/><circle cx="5" cy="-6" r="5" fill="#EF5350"/>
+          <circle cx="0" cy="-10" r="5" fill="#E53935"/><circle cx="-4" cy="0" r="4" fill="#EF9A9A"/>
+          <circle cx="4" cy="0" r="4" fill="#EF9A9A"/><circle cx="0" cy="-4" r="3" fill="#FFEE58"/>
+        </g>
+        <g transform="translate(900,700)">
+          <line x1="0" y1="0" x2="0" y2="26" stroke="#2E7D32" stroke-width="2"/>
+          <ellipse cx="-5" cy="-5" rx="4" ry="7" fill="#64B5F6" transform="rotate(-30 -5 -5)"/>
+          <ellipse cx="5" cy="-5" rx="4" ry="7" fill="#64B5F6" transform="rotate(30 5 -5)"/>
+          <ellipse cx="0" cy="-9" rx="4" ry="7" fill="#42A5F5"/>
+          <circle cx="0" cy="-3" r="3" fill="#FFF176"/>
+        </g>
+        <g transform="translate(1100,695)">
+          <line x1="0" y1="0" x2="0" y2="28" stroke="#2E7D32" stroke-width="2.5"/>
+          <ellipse cx="-6" cy="-5" rx="5" ry="8" fill="#F06292" transform="rotate(-25 -6 -5)"/>
+          <ellipse cx="6" cy="-5" rx="5" ry="8" fill="#F06292" transform="rotate(25 6 -5)"/>
+          <ellipse cx="0" cy="-10" rx="5" ry="8" fill="#EC407A"/>
+          <circle cx="0" cy="-3" r="4" fill="#FFD54F"/>
+        </g>
+        <g transform="translate(1350,705)">
+          <line x1="0" y1="0" x2="0" y2="24" stroke="#2E7D32" stroke-width="2"/>
+          <ellipse cx="-5" cy="-4" rx="4" ry="7" fill="#CE93D8" transform="rotate(-30 -5 -4)"/>
+          <ellipse cx="5" cy="-4" rx="4" ry="7" fill="#CE93D8" transform="rotate(30 5 -4)"/>
+          <ellipse cx="0" cy="-8" rx="4" ry="7" fill="#AB47BC"/>
+          <circle cx="0" cy="-2" r="3" fill="#FFF176"/>
+        </g>
+      </g>
+      <!-- Golden hatch with ornate detail -->
+      <ellipse cx="800" cy="740" rx="80" ry="22" fill="#5D4037"/>
+      <ellipse cx="800" cy="736" rx="72" ry="18" fill="#795548"/>
+      <ellipse cx="800" cy="728" rx="60" ry="16" fill="#FFD700" opacity="0.9">
+        <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite"/>
+      </ellipse>
+      <ellipse cx="800" cy="726" rx="48" ry="12" fill="#FFCA28" opacity="0.5"/>
+      <!-- Ornate hatch ring pattern -->
+      <ellipse cx="800" cy="726" rx="40" ry="10" fill="none" stroke="#FFA000" stroke-width="1.5" stroke-dasharray="6 3" opacity="0.4"/>
+      <circle cx="800" cy="726" r="8" fill="#FFA000"/>
+      <circle cx="800" cy="726" r="5" fill="#FFD700"/>
+      <circle cx="800" cy="726" r="2" fill="#FFF9C4"/>
+      <!-- Hatch glow rays -->
+      <g opacity="0.3">
+        <line x1="800" y1="720" x2="770" y2="680" stroke="#FFD700" stroke-width="3">
+          <animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite"/>
+        </line>
+        <line x1="800" y1="720" x2="800" y2="670" stroke="#FFD700" stroke-width="3">
+          <animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite" begin="0.3s"/>
+        </line>
+        <line x1="800" y1="720" x2="830" y2="680" stroke="#FFD700" stroke-width="3">
+          <animate attributeName="opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite" begin="0.6s"/>
+        </line>
+      </g>
+      <!-- Puffy layered clouds -->
+      <g opacity="0.7">
+        <ellipse cx="250" cy="250" rx="80" ry="35" fill="white"/>
+        <ellipse cx="210" cy="240" rx="50" ry="30" fill="white"/>
+        <ellipse cx="290" cy="245" rx="55" ry="28" fill="white"/>
+        <ellipse cx="250" cy="235" rx="60" ry="25" fill="#F5F5F5"/>
+      </g>
+      <g opacity="0.5">
+        <ellipse cx="1100" cy="300" rx="70" ry="30" fill="white"/>
+        <ellipse cx="1060" cy="292" rx="45" ry="25" fill="white"/>
+        <ellipse cx="1140" cy="295" rx="50" ry="24" fill="white"/>
+      </g>
+      <!-- Grass tufts -->
+      <g fill="#2E7D32" opacity="0.5">
+        <path d="M120,690 Q125,665 130,690 Q135,672 140,690 Q145,678 150,690"/>
+        <path d="M320,680 Q326,658 332,680 Q338,665 344,680"/>
+        <path d="M550,695 Q556,672 562,695 Q568,678 574,695"/>
+        <path d="M800,685 Q806,662 812,685 Q818,670 824,685"/>
+        <path d="M1050,692 Q1056,668 1062,692 Q1068,675 1074,692"/>
+        <path d="M1300,688 Q1306,665 1312,688 Q1318,672 1324,688"/>
+      </g>
+      <!-- Small mushrooms -->
+      <g opacity="0.6">
+        <ellipse cx="460" cy="718" rx="8" ry="5" fill="#EF5350"/>
+        <rect x="457" y="718" width="5" height="8" rx="2" fill="#FFCC80"/>
+        <circle cx="457" cy="716" r="2" fill="white" opacity="0.6"/>
+        <ellipse cx="1060" cy="712" rx="7" ry="4" fill="#FF9800"/>
+        <rect x="1057" y="712" width="5" height="7" rx="2" fill="#FFCC80"/>
+        <circle cx="1057" cy="710" r="1.5" fill="white" opacity="0.5"/>
+      </g>
+    </svg>
+
+    <div class="title-logo">✨ Story Quest ✨</div>
+    <div class="title-episode">Episode 1: The Whispering Woods</div>
+    <div class="title-characters">
+      <!-- FINN — Wind Waker inspired explorer kid -->
+      <svg width="80" height="120" viewBox="0 0 80 120">
+        <!-- Shadow -->
+        <ellipse cx="40" cy="115" rx="22" ry="5" fill="rgba(0,0,0,0.12)"/>
+        <!-- Boots -->
+        <path d="M22,105 L22,112 Q22,116 28,116 L34,116 Q36,116 36,114 L36,105" fill="#5D4037"/>
+        <path d="M44,105 L44,112 Q44,116 50,116 L56,116 Q58,116 58,114 L58,105" fill="#5D4037"/>
+        <path d="M22,112 Q22,116 28,116 L34,116 Q36,116 36,114" fill="#795548"/>
+        <path d="M44,112 Q44,116 50,116 L56,116 Q58,116 58,114" fill="#795548"/>
+        <!-- Legs -->
+        <rect x="26" y="88" width="12" height="20" rx="5" fill="#5D4037"/>
+        <rect x="42" y="88" width="12" height="20" rx="5" fill="#5D4037"/>
+        <!-- Body — tunic -->
+        <path d="M24,58 Q24,52 32,50 L48,50 Q56,52 56,58 L58,88 Q40,92 22,88 Z" fill="#4CAF50"/>
+        <path d="M24,58 Q24,52 32,50 L40,50 L40,88 Q32,90 22,88 Z" fill="#43A047"/>
+        <!-- Belt -->
+        <rect x="22" y="74" width="36" height="6" rx="2" fill="#795548"/>
+        <rect x="36" y="72" width="8" height="10" rx="2" fill="#FFD700"/>
+        <rect x="38" y="74" width="4" height="6" rx="1" fill="#FFA000"/>
+        <!-- Collar detail -->
+        <path d="M30,52 Q40,56 50,52" fill="#388E3C"/>
+        <!-- Arms -->
+        <path d="M22,58 Q14,62 12,74 Q11,78 14,80 L18,76 Q20,68 24,64" fill="#4CAF50"/>
+        <path d="M56,58 Q64,62 66,74 Q67,78 64,80 L60,76 Q58,68 54,64" fill="#43A047"/>
+        <!-- Hands -->
+        <circle cx="14" cy="79" r="5" fill="#FFCC80"/>
+        <circle cx="64" cy="79" r="5" fill="#FFCC80"/>
+        <!-- Neck -->
+        <rect x="34" y="44" width="12" height="8" rx="3" fill="#FFCC80"/>
+        <!-- Head -->
+        <ellipse cx="40" cy="34" rx="18" ry="20" fill="#FFCC80"/>
+        <!-- Eyes — large, expressive -->
+        <ellipse cx="33" cy="33" rx="5" ry="5.5" fill="white"/>
+        <ellipse cx="47" cy="33" rx="5" ry="5.5" fill="white"/>
+        <circle cx="34" cy="33.5" r="3.5" fill="#2E2E2E"/>
+        <circle cx="48" cy="33.5" r="3.5" fill="#2E2E2E"/>
+        <circle cx="35.5" cy="32" r="1.5" fill="white"/>
+        <circle cx="49.5" cy="32" r="1.5" fill="white"/>
+        <!-- Eyebrows -->
+        <path d="M28,27 Q33,24 38,27" stroke="#5D4037" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M42,27 Q47,24 52,27" stroke="#5D4037" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <!-- Nose -->
+        <ellipse cx="40" cy="38" rx="2" ry="1.5" fill="#FFAB91" opacity="0.7"/>
+        <!-- Mouth — cheerful grin -->
+        <path d="M34,42 Q40,48 46,42" stroke="#5D4037" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <!-- Cheek blush -->
+        <ellipse cx="27" cy="39" rx="4" ry="2.5" fill="#FFAB91" opacity="0.4"/>
+        <ellipse cx="53" cy="39" rx="4" ry="2.5" fill="#FFAB91" opacity="0.4"/>
+        <!-- Ears -->
+        <ellipse cx="22" cy="34" rx="3" ry="5" fill="#FFCC80"/>
+        <ellipse cx="58" cy="34" rx="3" ry="5" fill="#FFCC80"/>
+        <!-- Hair tufts -->
+        <path d="M24,24 Q28,18 34,22" fill="#8D6E63"/>
+        <path d="M46,22 Q52,18 56,24" fill="#8D6E63"/>
+        <!-- Hat — adventurer's hat with detail -->
+        <path d="M16,28 Q20,8 40,4 Q60,8 64,28 L58,30 Q55,14 40,10 Q25,14 22,30 Z" fill="#388E3C"/>
+        <path d="M16,28 Q20,8 40,4 Q40,10 25,14 Q22,20 22,30 Z" fill="#43A047"/>
+        <!-- Hat band -->
+        <path d="M20,26 Q40,18 60,26" stroke="#2E7D32" stroke-width="3" fill="none"/>
+        <!-- Hat buckle -->
+        <rect x="37" y="22" width="6" height="5" rx="1" fill="#FFD700"/>
+      </svg>
+      <!-- WREN — Wise reader girl with purple cloak -->
+      <svg width="75" height="120" viewBox="0 0 75 120">
+        <!-- Shadow -->
+        <ellipse cx="37" cy="115" rx="20" ry="5" fill="rgba(0,0,0,0.12)"/>
+        <!-- Boots -->
+        <path d="M20,105 L20,112 Q20,116 25,116 L31,116 Q33,116 33,114 L33,105" fill="#5D4037"/>
+        <path d="M41,105 L41,112 Q41,116 46,116 L52,116 Q54,116 54,114 L54,105" fill="#5D4037"/>
+        <!-- Legs -->
+        <rect x="23" y="88" width="11" height="20" rx="5" fill="#5D4037"/>
+        <rect x="40" y="88" width="11" height="20" rx="5" fill="#5D4037"/>
+        <!-- Dress/robe -->
+        <path d="M20,52 Q20,48 30,46 L44,46 Q54,48 54,52 L58,90 Q37,95 16,90 Z" fill="#7B1FA2"/>
+        <path d="M20,52 Q20,48 30,46 L37,46 L37,90 Q28,92 16,90 Z" fill="#6A1B9A"/>
+        <!-- Cloak over shoulders -->
+        <path d="M14,50 Q20,44 30,46 L20,52 L12,72 Q10,78 14,76 Q16,70 18,62 Z" fill="#9C27B0"/>
+        <path d="M60,50 Q54,44 44,46 L54,52 L62,72 Q64,78 60,76 Q58,70 56,62 Z" fill="#8E24AA"/>
+        <!-- Cloak clasp -->
+        <circle cx="37" cy="48" r="4" fill="#FFD700" stroke="#FFA000" stroke-width="1"/>
+        <circle cx="37" cy="48" r="2" fill="#FFF9C4"/>
+        <!-- Arms -->
+        <path d="M18,54 Q10,60 8,72 Q7,76 10,78 L14,74 Q15,66 18,60" fill="#9C27B0"/>
+        <path d="M56,54 Q62,58 64,68 Q64,72 62,74" fill="#8E24AA"/>
+        <!-- Hands -->
+        <circle cx="10" cy="77" r="4.5" fill="#FFCC80"/>
+        <circle cx="62" cy="73" r="4.5" fill="#FFCC80"/>
+        <!-- Book in right hand -->
+        <g transform="translate(56,65) rotate(10)">
+          <rect x="0" y="0" width="18" height="24" rx="2" fill="#FFCA28" stroke="#F9A825" stroke-width="1.5"/>
+          <rect x="2" y="2" width="14" height="20" rx="1" fill="#FFF8E1"/>
+          <line x1="5" y1="6" x2="13" y2="6" stroke="#D7CCC8" stroke-width="1"/>
+          <line x1="5" y1="9" x2="13" y2="9" stroke="#D7CCC8" stroke-width="1"/>
+          <line x1="5" y1="12" x2="11" y2="12" stroke="#D7CCC8" stroke-width="1"/>
+          <line x1="5" y1="15" x2="13" y2="15" stroke="#D7CCC8" stroke-width="1"/>
+          <!-- Book spine -->
+          <rect x="-1" y="1" width="3" height="22" rx="1" fill="#F9A825"/>
+        </g>
+        <!-- Neck -->
+        <rect x="32" y="40" width="10" height="7" rx="3" fill="#FFCC80"/>
+        <!-- Head -->
+        <ellipse cx="37" cy="28" rx="16" ry="18" fill="#FFCC80"/>
+        <!-- Eyes -->
+        <ellipse cx="31" cy="27" rx="4.5" ry="5" fill="white"/>
+        <ellipse cx="43" cy="27" rx="4.5" ry="5" fill="white"/>
+        <circle cx="32" cy="27.5" r="3" fill="#4E342E"/>
+        <circle cx="44" cy="27.5" r="3" fill="#4E342E"/>
+        <circle cx="33" cy="26.5" r="1.3" fill="white"/>
+        <circle cx="45" cy="26.5" r="1.3" fill="white"/>
+        <!-- Eyelashes -->
+        <path d="M27,23 L28,25" stroke="#4E342E" stroke-width="1" stroke-linecap="round"/>
+        <path d="M47,23 L46,25" stroke="#4E342E" stroke-width="1" stroke-linecap="round"/>
+        <!-- Eyebrows -->
+        <path d="M27,22 Q31,19 35,22" stroke="#4E342E" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M39,22 Q43,19 47,22" stroke="#4E342E" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <!-- Nose -->
+        <ellipse cx="37" cy="32" rx="1.5" ry="1.2" fill="#FFAB91" opacity="0.6"/>
+        <!-- Gentle smile -->
+        <path d="M33,36 Q37,39 41,36" stroke="#5D4037" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <!-- Cheek blush -->
+        <ellipse cx="25" cy="32" rx="3.5" ry="2" fill="#F48FB1" opacity="0.35"/>
+        <ellipse cx="49" cy="32" rx="3.5" ry="2" fill="#F48FB1" opacity="0.35"/>
+        <!-- Hair — long brown with waves -->
+        <path d="M21,28 Q19,12 37,8 Q55,12 53,28" fill="#5D4037"/>
+        <path d="M21,28 Q19,12 37,8 Q37,15 25,20 Q22,24 22,28" fill="#6D4C41"/>
+        <!-- Hair flowing down sides -->
+        <path d="M21,28 Q18,40 20,52 Q22,56 24,52 Q23,40 24,30" fill="#5D4037"/>
+        <path d="M53,28 Q56,40 54,52 Q52,56 50,52 Q51,40 50,30" fill="#5D4037"/>
+        <!-- Hair accessory — purple flower -->
+        <circle cx="22" cy="22" r="4" fill="#CE93D8"/>
+        <circle cx="22" cy="22" r="2" fill="#E1BEE7"/>
+        <!-- Ears -->
+        <ellipse cx="21" cy="28" rx="2.5" ry="4" fill="#FFCC80"/>
+        <ellipse cx="53" cy="28" rx="2.5" ry="4" fill="#FFCC80"/>
+      </svg>
+      <!-- PIP — Adorable frog companion -->
+      <svg width="55" height="70" viewBox="0 0 55 70">
+        <!-- Shadow -->
+        <ellipse cx="27" cy="65" rx="16" ry="4" fill="rgba(0,0,0,0.1)"/>
+        <!-- Back legs -->
+        <path d="M8,52 Q2,56 4,62 Q6,66 12,64 L16,58 Q12,54 10,50" fill="#4CAF50"/>
+        <path d="M46,52 Q52,56 50,62 Q48,66 42,64 L38,58 Q42,54 44,50" fill="#4CAF50"/>
+        <!-- Webbed feet -->
+        <path d="M2,62 Q0,66 4,66 L8,64 Q6,68 10,68 L14,64 Q12,68 16,66 L16,62 Z" fill="#388E3C"/>
+        <path d="M38,62 Q36,66 40,66 L42,64 Q42,68 46,68 L48,64 Q50,68 52,66 L52,62 Z" fill="#388E3C"/>
+        <!-- Body — round and plump -->
+        <ellipse cx="27" cy="44" rx="20" ry="18" fill="#66BB6A"/>
+        <!-- Belly -->
+        <ellipse cx="27" cy="48" rx="14" ry="12" fill="#A5D6A7"/>
+        <!-- Belly spots -->
+        <circle cx="22" cy="46" r="2" fill="#81C784" opacity="0.5"/>
+        <circle cx="32" cy="50" r="1.5" fill="#81C784" opacity="0.5"/>
+        <!-- Eye mounds -->
+        <circle cx="18" cy="28" r="10" fill="#66BB6A"/>
+        <circle cx="36" cy="28" r="10" fill="#66BB6A"/>
+        <!-- Eyes — big and adorable -->
+        <circle cx="18" cy="27" r="7" fill="white"/>
+        <circle cx="36" cy="27" r="7" fill="white"/>
+        <circle cx="20" cy="26" r="4.5" fill="#2E2E2E"/>
+        <circle cx="38" cy="26" r="4.5" fill="#2E2E2E"/>
+        <circle cx="21.5" cy="24.5" r="2" fill="white"/>
+        <circle cx="39.5" cy="24.5" r="2" fill="white"/>
+        <circle cx="19" cy="28" r="0.8" fill="white" opacity="0.5"/>
+        <circle cx="37" cy="28" r="0.8" fill="white" opacity="0.5"/>
+        <!-- Nostrils -->
+        <circle cx="24" cy="35" r="1.5" fill="#43A047"/>
+        <circle cx="30" cy="35" r="1.5" fill="#43A047"/>
+        <!-- Wide happy mouth -->
+        <path d="M16,40 Q27,48 38,40" stroke="#2E7D32" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <!-- Cheek spots -->
+        <ellipse cx="12" cy="38" rx="3" ry="2" fill="#81C784" opacity="0.4"/>
+        <ellipse cx="42" cy="38" rx="3" ry="2" fill="#81C784" opacity="0.4"/>
+        <!-- Front legs/arms -->
+        <path d="M10,48 Q6,52 8,54 L12,52 Q14,50 12,46" fill="#66BB6A"/>
+        <path d="M44,48 Q48,52 46,54 L42,52 Q40,50 42,46" fill="#66BB6A"/>
+      </svg>
+    </div>
+    <button class="start-btn" onclick="startGame()" style="margin-top:30px">▶ Begin Adventure</button>
+  </div>
+
+  <!-- ═════════════════════════════════════
+       SCENE 1: THE HATCH OPENS
+       ═════════════════════════════════════ -->
+  <div class="scene" id="scene-1">
+    <div class="scene-bg">
+      <svg class="bg-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <radialGradient id="s1-sun" cx="80%" cy="10%" r="35%">
+            <stop offset="0%" stop-color="#FFF9C4"/>
+            <stop offset="30%" stop-color="#FFD54F" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </radialGradient>
+          <linearGradient id="s1-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#64B5F6"/>
+            <stop offset="40%" stop-color="#90CAF9"/>
+            <stop offset="70%" stop-color="#B3E5FC"/>
+            <stop offset="100%" stop-color="#E1F5FE"/>
+          </linearGradient>
+        </defs>
+        <rect width="1600" height="1000" fill="url(#s1-sky)"/>
+        <rect width="1600" height="1000" fill="url(#s1-sun)"/>
+        <!-- Layered clouds (animated drift) -->
+        <g opacity="0.85" class="scene-cloud-drift">
+          <ellipse cx="200" cy="120" rx="90" ry="40" fill="white"/>
+          <ellipse cx="155" cy="110" rx="55" ry="35" fill="white"/>
+          <ellipse cx="250" cy="112" rx="60" ry="32" fill="#FAFAFA"/>
+          <ellipse cx="200" cy="105" rx="65" ry="28" fill="#F5F5F5"/>
+        </g>
+        <g opacity="0.6" class="scene-cloud-drift c2">
+          <ellipse cx="900" cy="80" rx="70" ry="32" fill="white"/>
+          <ellipse cx="860" cy="72" rx="45" ry="25" fill="white"/>
+          <ellipse cx="945" cy="75" rx="50" ry="28" fill="white"/>
+        </g>
+        <g opacity="0.5" class="scene-cloud-drift c3">
+          <ellipse cx="1300" cy="150" rx="80" ry="35" fill="white"/>
+          <ellipse cx="1260" cy="142" rx="50" ry="28" fill="white"/>
+          <ellipse cx="1350" cy="145" rx="55" ry="25" fill="white"/>
+        </g>
+        <!-- Sun -->
+        <circle cx="1300" cy="100" r="50" fill="#FFD54F" opacity="0.8">
+          <animate attributeName="r" values="48;52;48" dur="4s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="1300" cy="100" r="65" fill="#FFD54F" opacity="0.15">
+          <animate attributeName="r" values="60;70;60" dur="4s" repeatCount="indefinite"/>
+        </circle>
+        <!-- Far hills with trees -->
+        <ellipse cx="300" cy="520" rx="450" ry="80" fill="#81C784" opacity="0.6"/>
+        <ellipse cx="1000" cy="500" rx="500" ry="90" fill="#A5D6A7" opacity="0.5"/>
+        <ellipse cx="1400" cy="530" rx="400" ry="70" fill="#81C784" opacity="0.6"/>
+        <!-- Distant trees -->
+        <g opacity="0.5">
+          <path d="M180,480 L195,430 L210,480Z" fill="#558B2F"/>
+          <rect x="192" y="480" width="6" height="15" fill="#5D4037"/>
+          <path d="M350,470 L368,410 L386,470Z" fill="#33691E"/>
+          <rect x="365" y="470" width="6" height="12" fill="#4E342E"/>
+          <path d="M1150,460 L1168,400 L1186,460Z" fill="#558B2F"/>
+          <path d="M1320,475 L1335,420 L1350,475Z" fill="#33691E"/>
+        </g>
+        <!-- Mid hills -->
+        <ellipse cx="600" cy="580" rx="600" ry="100" fill="#66BB6A"/>
+        <ellipse cx="1200" cy="570" rx="500" ry="90" fill="#4CAF50"/>
+        <!-- Ground layers -->
+        <rect x="0" y="580" width="1600" height="420" fill="#4CAF50"/>
+        <rect x="0" y="620" width="1600" height="380" fill="#43A047"/>
+        <rect x="0" y="700" width="1600" height="300" fill="#388E3C"/>
+        <!-- Rich wildflower field (swaying) -->
+        <g>
+          <g transform="translate(150,630)" class="svg-sway-flower" style="animation-delay:-0.2s">
+            <line x1="0" y1="0" x2="0" y2="24" stroke="#2E7D32" stroke-width="2.5"/>
+            <circle cx="-5" cy="-6" r="5" fill="#F06292"/><circle cx="5" cy="-6" r="5" fill="#F06292"/>
+            <circle cx="0" cy="-10" r="5" fill="#EC407A"/><circle cx="0" cy="-4" r="3" fill="#FFD54F"/>
+          </g>
+          <g transform="translate(300,620)" class="svg-sway-flower" style="animation-delay:-0.8s">
+            <line x1="0" y1="0" x2="0" y2="20" stroke="#2E7D32" stroke-width="2"/>
+            <ellipse cx="-4" cy="-4" rx="4" ry="6" fill="#FFEE58" transform="rotate(-20 -4 -4)"/>
+            <ellipse cx="4" cy="-4" rx="4" ry="6" fill="#FFEE58" transform="rotate(20 4 -4)"/>
+            <circle cx="0" cy="-2" r="3" fill="#FDD835"/>
+          </g>
+          <g transform="translate(480,640)" class="svg-sway-flower" style="animation-delay:-1.5s">
+            <line x1="0" y1="0" x2="0" y2="22" stroke="#2E7D32" stroke-width="2"/>
+            <ellipse cx="-4" cy="-4" rx="4" ry="6" fill="#CE93D8" transform="rotate(-25 -4 -4)"/>
+            <ellipse cx="4" cy="-4" rx="4" ry="6" fill="#CE93D8" transform="rotate(25 4 -4)"/>
+            <ellipse cx="0" cy="-8" rx="3" ry="5" fill="#AB47BC"/>
+            <circle cx="0" cy="-2" r="2" fill="#FFF176"/>
+          </g>
+          <g transform="translate(600,625)" class="svg-sway-flower" style="animation-delay:-2.2s">
+            <line x1="0" y1="0" x2="0" y2="24" stroke="#2E7D32" stroke-width="2.5"/>
+            <circle cx="-5" cy="-5" r="5" fill="#EF5350"/><circle cx="5" cy="-5" r="5" fill="#EF5350"/>
+            <circle cx="0" cy="-9" r="5" fill="#E53935"/><circle cx="0" cy="-3" r="3" fill="#FFEE58"/>
+          </g>
+          <g transform="translate(950,635)" class="svg-sway-flower" style="animation-delay:-0.5s">
+            <line x1="0" y1="0" x2="0" y2="22" stroke="#2E7D32" stroke-width="2"/>
+            <ellipse cx="-4" cy="-4" rx="4" ry="6" fill="#64B5F6" transform="rotate(-20 -4 -4)"/>
+            <ellipse cx="4" cy="-4" rx="4" ry="6" fill="#64B5F6" transform="rotate(20 4 -4)"/>
+            <circle cx="0" cy="-2" r="3" fill="#42A5F5"/>
+          </g>
+          <g transform="translate(1100,620)" class="svg-sway-flower" style="animation-delay:-1.8s">
+            <line x1="0" y1="0" x2="0" y2="25" stroke="#2E7D32" stroke-width="2.5"/>
+            <ellipse cx="-5" cy="-5" rx="5" ry="8" fill="#FFB74D" transform="rotate(-25 -5 -5)"/>
+            <ellipse cx="5" cy="-5" rx="5" ry="8" fill="#FFB74D" transform="rotate(25 5 -5)"/>
+            <ellipse cx="0" cy="-10" rx="4" ry="6" fill="#FFA726"/>
+            <circle cx="0" cy="-3" r="3" fill="#5D4037"/>
+          </g>
+          <g transform="translate(1300,640)" class="svg-sway-flower" style="animation-delay:-2.8s">
+            <line x1="0" y1="0" x2="0" y2="22" stroke="#2E7D32" stroke-width="2"/>
+            <circle cx="-4" cy="-5" r="4" fill="#F06292"/><circle cx="4" cy="-5" r="4" fill="#F06292"/>
+            <circle cx="0" cy="-8" r="4" fill="#EC407A"/><circle cx="0" cy="-3" r="2.5" fill="#FFD54F"/>
+          </g>
+          <g transform="translate(1450,625)" class="svg-sway-flower" style="animation-delay:-3.2s">
+            <line x1="0" y1="0" x2="0" y2="20" stroke="#2E7D32" stroke-width="2"/>
+            <ellipse cx="-4" cy="-4" rx="4" ry="6" fill="#CE93D8" transform="rotate(-25 -4 -4)"/>
+            <ellipse cx="4" cy="-4" rx="4" ry="6" fill="#CE93D8" transform="rotate(25 4 -4)"/>
+            <circle cx="0" cy="-2" r="2.5" fill="#FFF176"/>
+          </g>
+        </g>
+        <!-- Grass tufts (swaying) -->
+        <g fill="#2E7D32" opacity="0.4">
+          <g class="svg-sway" style="animation-delay:0s"><path d="M50,700 Q55,680 60,700 Q65,685 70,700"/></g>
+          <g class="svg-sway" style="animation-delay:-1s"><path d="M250,690 Q255,670 260,690 Q265,675 270,690"/></g>
+          <g class="svg-sway" style="animation-delay:-2s"><path d="M450,705 Q455,685 460,705 Q465,690 470,705"/></g>
+          <g class="svg-sway" style="animation-delay:-0.5s"><path d="M700,695 Q705,675 710,695 Q715,680 720,695"/></g>
+          <g class="svg-sway" style="animation-delay:-1.5s"><path d="M1000,700 Q1005,680 1010,700 Q1015,685 1020,700"/></g>
+          <g class="svg-sway" style="animation-delay:-2.5s"><path d="M1250,695 Q1255,675 1260,695 Q1265,680 1270,695"/></g>
+          <g class="svg-sway" style="animation-delay:-3s"><path d="M1500,705 Q1505,685 1510,705"/></g>
+        </g>
+        <!-- Sunlight shimmer -->
+        <rect width="1600" height="400" fill="url(#s1-sun)" opacity="0.15">
+          <animate attributeName="opacity" values="0.1;0.2;0.1" dur="5s" repeatCount="indefinite"/>
+        </rect>
+      </svg>
+      <!-- Butterflies -->
+      <svg class="butterfly" style="top:25%;left:20%;width:28px;height:28px" viewBox="0 0 30 30">
+        <ellipse cx="10" cy="12" rx="8" ry="10" fill="#E040FB" opacity="0.7">
+          <animate attributeName="rx" values="8;3;8" dur="0.5s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="20" cy="12" rx="8" ry="10" fill="#E040FB" opacity="0.7">
+          <animate attributeName="rx" values="8;3;8" dur="0.5s" repeatCount="indefinite"/>
+        </ellipse>
+        <rect x="14" y="5" width="2" height="20" rx="1" fill="#4A148C"/>
+      </svg>
+      <svg class="butterfly" style="top:35%;right:25%;width:24px;height:24px;animation-delay:-4s;animation-duration:11s" viewBox="0 0 30 30">
+        <ellipse cx="10" cy="12" rx="8" ry="10" fill="#FFD54F" opacity="0.7">
+          <animate attributeName="rx" values="8;3;8" dur="0.6s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="20" cy="12" rx="8" ry="10" fill="#FFD54F" opacity="0.7">
+          <animate attributeName="rx" values="8;3;8" dur="0.6s" repeatCount="indefinite"/>
+        </ellipse>
+        <rect x="14" y="5" width="2" height="20" rx="1" fill="#F57F17"/>
+      </svg>
+      <!-- Warm light particles -->
+      <div class="ambient-particle warm-particle" style="top:50%;left:30%;animation-delay:0s"></div>
+      <div class="ambient-particle warm-particle" style="top:55%;left:55%;animation-delay:-2s;animation-duration:8s"></div>
+      <div class="ambient-particle warm-particle" style="top:60%;left:75%;animation-delay:-4s;animation-duration:7s"></div>
+      <div class="ambient-particle warm-particle" style="top:45%;left:45%;animation-delay:-1s;animation-duration:9s"></div>
+    </div>
+
+    <div class="scene-content">
+      <!-- Hatch -->
+      <div class="hatch-container" id="hatch" onclick="openHatch()">
+        <div class="hatch-glow"></div>
+        <div class="hatch-tap-ring" id="hatch-tap-ring"></div>
+        <svg class="hatch" viewBox="0 0 160 100">
+          <!-- Ground depression -->
+          <ellipse cx="80" cy="80" rx="70" ry="18" fill="#5D4037"/>
+          <ellipse cx="80" cy="76" rx="65" ry="15" fill="#795548"/>
+          <!-- Hatch lid with ornate rings -->
+          <g id="hatch-lid" style="transform-origin: 80px 60px; transition: transform 0.8s ease">
+            <ellipse cx="80" cy="60" rx="55" ry="14" fill="#FFD700" stroke="#FFA000" stroke-width="3"/>
+            <ellipse cx="80" cy="58" rx="45" ry="10" fill="#FFCA28" opacity="0.6"/>
+            <ellipse cx="80" cy="60" rx="35" ry="8" fill="none" stroke="#FFA000" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
+            <ellipse cx="80" cy="60" rx="25" ry="6" fill="none" stroke="#FFA000" stroke-width="1" stroke-dasharray="3 4" opacity="0.3"/>
+            <circle cx="80" cy="58" r="8" fill="#FFA000" stroke="#FF8F00" stroke-width="2"/>
+            <circle cx="80" cy="58" r="4" fill="#FFD700"/>
+            <circle cx="80" cy="58" r="1.5" fill="#FFF9C4"/>
+          </g>
+          <!-- Light rays (hidden until opened) -->
+          <g id="hatch-rays" opacity="0">
+            <line x1="80" y1="60" x2="50" y2="20" stroke="#FFD700" stroke-width="3" opacity="0.5"/>
+            <line x1="80" y1="60" x2="80" y2="10" stroke="#FFD700" stroke-width="3" opacity="0.5"/>
+            <line x1="80" y1="60" x2="110" y2="20" stroke="#FFD700" stroke-width="3" opacity="0.5"/>
+            <line x1="80" y1="60" x2="40" y2="30" stroke="#FFD700" stroke-width="2" opacity="0.3"/>
+            <line x1="80" y1="60" x2="120" y2="30" stroke="#FFD700" stroke-width="2" opacity="0.3"/>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Characters (with breathing, blinking, bobbing) -->
+      <div class="characters-row" id="scene1-characters">
+        <!-- Finn -->
+        <svg width="90" height="130" viewBox="0 0 80 120">
+          <ellipse cx="40" cy="115" rx="22" ry="5" fill="rgba(0,0,0,0.12)"/>
+          <path d="M22,105 L22,112 Q22,116 28,116 L34,116 Q36,116 36,114 L36,105" fill="#5D4037"/>
+          <path d="M44,105 L44,112 Q44,116 50,116 L56,116 Q58,116 58,114 L58,105" fill="#5D4037"/>
+          <rect x="26" y="88" width="12" height="20" rx="5" fill="#5D4037"/>
+          <rect x="42" y="88" width="12" height="20" rx="5" fill="#5D4037"/>
+          <!-- Torso (breathing) -->
+          <g style="animation: breathe 4s ease-in-out infinite; transform-origin: 40px 88px">
+          <path d="M24,58 Q24,52 32,50 L48,50 Q56,52 56,58 L58,88 Q40,92 22,88 Z" fill="#4CAF50"/>
+          <path d="M24,58 Q24,52 32,50 L40,50 L40,88 Q32,90 22,88 Z" fill="#43A047"/>
+          <rect x="22" y="74" width="36" height="6" rx="2" fill="#795548"/>
+          <rect x="36" y="72" width="8" height="10" rx="2" fill="#FFD700"/>
+          <path d="M22,58 Q14,62 12,74 Q11,78 14,80 L18,76 Q20,68 24,64" fill="#4CAF50"/>
+          <path d="M56,58 Q64,62 66,74 Q67,78 64,80 L60,76 Q58,68 54,64" fill="#43A047"/>
+          <circle cx="14" cy="79" r="5" fill="#FFCC80"/>
+          <circle cx="64" cy="79" r="5" fill="#FFCC80"/>
+          </g>
+          <rect x="34" y="44" width="12" height="8" rx="3" fill="#FFCC80"/>
+          <ellipse cx="40" cy="34" rx="18" ry="20" fill="#FFCC80"/>
+          <!-- Eyes (with blink) -->
+          <ellipse cx="33" cy="33" rx="5" ry="5.5" fill="white"/>
+          <ellipse cx="47" cy="33" rx="5" ry="5.5" fill="white"/>
+          <g style="animation: blink 4s ease-in-out infinite; transform-origin: 34px 33.5px">
+            <circle cx="34" cy="33.5" r="3.5" fill="#2E2E2E"/>
+            <circle cx="35.5" cy="32" r="1.5" fill="white"/>
+          </g>
+          <g style="animation: blink 4s ease-in-out infinite 0.05s; transform-origin: 48px 33.5px">
+            <circle cx="48" cy="33.5" r="3.5" fill="#2E2E2E"/>
+            <circle cx="49.5" cy="32" r="1.5" fill="white"/>
+          </g>
+          <path d="M28,27 Q33,24 38,27" stroke="#5D4037" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M42,27 Q47,24 52,27" stroke="#5D4037" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <ellipse cx="40" cy="38" rx="2" ry="1.5" fill="#FFAB91" opacity="0.7"/>
+          <path d="M34,42 Q40,48 46,42" stroke="#5D4037" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <ellipse cx="27" cy="39" rx="4" ry="2.5" fill="#FFAB91" opacity="0.4"/>
+          <ellipse cx="53" cy="39" rx="4" ry="2.5" fill="#FFAB91" opacity="0.4"/>
+          <ellipse cx="22" cy="34" rx="3" ry="5" fill="#FFCC80"/>
+          <ellipse cx="58" cy="34" rx="3" ry="5" fill="#FFCC80"/>
+          <path d="M16,28 Q20,8 40,4 Q60,8 64,28 L58,30 Q55,14 40,10 Q25,14 22,30 Z" fill="#388E3C"/>
+          <path d="M16,28 Q20,8 40,4 Q40,10 25,14 Q22,20 22,30 Z" fill="#43A047"/>
+          <path d="M20,26 Q40,18 60,26" stroke="#2E7D32" stroke-width="3" fill="none"/>
+          <rect x="37" y="22" width="6" height="5" rx="1" fill="#FFD700"/>
+        </svg>
+        <!-- Wren -->
+        <svg width="80" height="130" viewBox="0 0 75 120">
+          <ellipse cx="37" cy="115" rx="20" ry="5" fill="rgba(0,0,0,0.12)"/>
+          <path d="M20,105 L20,112 Q20,116 25,116 L31,116 Q33,116 33,114 L33,105" fill="#5D4037"/>
+          <path d="M41,105 L41,112 Q41,116 46,116 L52,116 Q54,116 54,114 L54,105" fill="#5D4037"/>
+          <rect x="23" y="88" width="11" height="20" rx="5" fill="#5D4037"/>
+          <rect x="40" y="88" width="11" height="20" rx="5" fill="#5D4037"/>
+          <!-- Torso (breathing) -->
+          <g style="animation: breathe 4.5s ease-in-out infinite 0.5s; transform-origin: 37px 90px">
+          <path d="M20,52 Q20,48 30,46 L44,46 Q54,48 54,52 L58,90 Q37,95 16,90 Z" fill="#7B1FA2"/>
+          <path d="M14,50 Q20,44 30,46 L20,52 L12,72 Q10,78 14,76" fill="#9C27B0"/>
+          <path d="M60,50 Q54,44 44,46 L54,52 L62,72 Q64,78 60,76" fill="#8E24AA"/>
+          <circle cx="37" cy="48" r="4" fill="#FFD700"/>
+          <path d="M18,54 Q10,60 8,72 Q7,76 10,78" fill="#9C27B0"/>
+          <path d="M56,54 Q62,58 64,68 Q64,72 62,74" fill="#8E24AA"/>
+          <circle cx="10" cy="77" r="4.5" fill="#FFCC80"/>
+          <circle cx="62" cy="73" r="4.5" fill="#FFCC80"/>
+          <!-- Book (with glow pulse) -->
+          <g transform="translate(56,65) rotate(10)" style="animation: book-glow 3s ease-in-out infinite">
+            <rect x="0" y="0" width="18" height="24" rx="2" fill="#FFCA28" stroke="#F9A825" stroke-width="1.5"/>
+            <rect x="2" y="2" width="14" height="20" rx="1" fill="#FFF8E1"/>
+            <line x1="5" y1="6" x2="13" y2="6" stroke="#D7CCC8" stroke-width="1"/>
+            <line x1="5" y1="9" x2="13" y2="9" stroke="#D7CCC8" stroke-width="1"/>
+            <line x1="5" y1="12" x2="11" y2="12" stroke="#D7CCC8" stroke-width="1"/>
+          </g>
+          </g>
+          <rect x="32" y="40" width="10" height="7" rx="3" fill="#FFCC80"/>
+          <ellipse cx="37" cy="28" rx="16" ry="18" fill="#FFCC80"/>
+          <!-- Eyes (with blink) -->
+          <ellipse cx="31" cy="27" rx="4.5" ry="5" fill="white"/>
+          <ellipse cx="43" cy="27" rx="4.5" ry="5" fill="white"/>
+          <g style="animation: blink 5s ease-in-out infinite 1s; transform-origin: 32px 27.5px">
+            <circle cx="32" cy="27.5" r="3" fill="#4E342E"/>
+            <circle cx="33" cy="26.5" r="1.3" fill="white"/>
+          </g>
+          <g style="animation: blink 5s ease-in-out infinite 1.05s; transform-origin: 44px 27.5px">
+            <circle cx="44" cy="27.5" r="3" fill="#4E342E"/>
+            <circle cx="45" cy="26.5" r="1.3" fill="white"/>
+          </g>
+          <path d="M33,36 Q37,39 41,36" stroke="#5D4037" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <ellipse cx="25" cy="32" rx="3.5" ry="2" fill="#F48FB1" opacity="0.35"/>
+          <ellipse cx="49" cy="32" rx="3.5" ry="2" fill="#F48FB1" opacity="0.35"/>
+          <path d="M21,28 Q19,12 37,8 Q55,12 53,28" fill="#5D4037"/>
+          <path d="M21,28 Q18,40 20,52 Q22,56 24,52 Q23,40 24,30" fill="#5D4037"/>
+          <path d="M53,28 Q56,40 54,52 Q52,56 50,52 Q51,40 50,30" fill="#5D4037"/>
+          <circle cx="22" cy="22" r="4" fill="#CE93D8"/>
+          <circle cx="22" cy="22" r="2" fill="#E1BEE7"/>
+        </svg>
+        <!-- Pip (with bob and blink) -->
+        <svg width="65" height="75" viewBox="0 0 55 70" style="animation: frog-bob 3s ease-in-out infinite">
+          <ellipse cx="27" cy="65" rx="16" ry="4" fill="rgba(0,0,0,0.1)"/>
+          <path d="M8,52 Q2,56 4,62 Q6,66 12,64 L16,58" fill="#4CAF50"/>
+          <path d="M46,52 Q52,56 50,62 Q48,66 42,64 L38,58" fill="#4CAF50"/>
+          <path d="M2,62 Q0,66 4,66 L8,64 Q6,68 10,68 L14,64 Q12,68 16,66 L16,62 Z" fill="#388E3C"/>
+          <path d="M38,62 Q36,66 40,66 L42,64 Q42,68 46,68 L48,64 Q50,68 52,66 L52,62 Z" fill="#388E3C"/>
+          <!-- Body (with throat pulse) -->
+          <ellipse cx="27" cy="44" rx="20" ry="18" fill="#66BB6A"/>
+          <ellipse cx="27" cy="48" rx="14" ry="12" fill="#A5D6A7" style="animation: throat-pulse 5s ease-in-out infinite; transform-origin: 27px 48px"/>
+          <circle cx="18" cy="28" r="10" fill="#66BB6A"/>
+          <circle cx="36" cy="28" r="10" fill="#66BB6A"/>
+          <!-- Pip eyes (with blink) -->
+          <circle cx="18" cy="27" r="7" fill="white"/>
+          <circle cx="36" cy="27" r="7" fill="white"/>
+          <g style="animation: blink 3.5s ease-in-out infinite; transform-origin: 20px 26px">
+            <circle cx="20" cy="26" r="4.5" fill="#2E2E2E"/>
+            <circle cx="21.5" cy="24.5" r="2" fill="white"/>
+          </g>
+          <g style="animation: blink 3.5s ease-in-out infinite 0.05s; transform-origin: 38px 26px">
+            <circle cx="38" cy="26" r="4.5" fill="#2E2E2E"/>
+            <circle cx="39.5" cy="24.5" r="2" fill="white"/>
+          </g>
+          <circle cx="24" cy="35" r="1.5" fill="#43A047"/>
+          <circle cx="30" cy="35" r="1.5" fill="#43A047"/>
+          <path d="M16,40 Q27,48 38,40" stroke="#2E7D32" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <!-- Choices -->
+      <div class="choices-container" id="scene1-choices" style="display:none">
+        <button class="choice-btn" onclick="goToScene('2a')">
+          <span class="icon">🔊</span> Follow the sound
+        </button>
+        <button class="choice-btn secondary" onclick="goToScene('2b')">
+          <span class="icon">🌸</span> Explore the meadow
+        </button>
+      </div>
+    </div>
+
+    <div class="narrative-box">
+      <div class="narrative-text" id="narrative-1"></div>
+      <div class="tap-hint" id="tap-hint-1">tap to continue</div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════
+       SCENE 2A: THE COUNTING BRIDGE
+       ═════════════════════════════════════ -->
+  <div class="scene" id="scene-2a">
+    <div class="scene-bg">
+      <svg class="bg-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="s2-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#64B5F6"/>
+            <stop offset="50%" stop-color="#90CAF9"/>
+            <stop offset="100%" stop-color="#B3E5FC"/>
+          </linearGradient>
+          <linearGradient id="s2-water" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#4FC3F7"/>
+            <stop offset="50%" stop-color="#039BE5"/>
+            <stop offset="100%" stop-color="#01579B"/>
+          </linearGradient>
+        </defs>
+        <rect width="1600" height="1000" fill="url(#s2-sky)"/>
+        <!-- Sun -->
+        <circle cx="200" cy="120" r="40" fill="#FFD54F" opacity="0.7"/>
+        <circle cx="200" cy="120" r="55" fill="#FFD54F" opacity="0.15"/>
+        <!-- Clouds (drifting) -->
+        <g opacity="0.75" class="scene-cloud-drift">
+          <ellipse cx="500" cy="100" rx="80" ry="35" fill="white"/>
+          <ellipse cx="460" cy="90" rx="50" ry="28" fill="white"/>
+          <ellipse cx="545" cy="93" rx="55" ry="25" fill="white"/>
+        </g>
+        <g opacity="0.5" class="scene-cloud-drift c2">
+          <ellipse cx="1200" cy="130" rx="70" ry="30" fill="white"/>
+          <ellipse cx="1165" cy="122" rx="45" ry="24" fill="white"/>
+          <ellipse cx="1240" cy="125" rx="48" ry="22" fill="white"/>
+        </g>
+        <!-- Left bank with detailed trees -->
+        <rect x="80" y="350" width="22" height="120" rx="5" fill="#5D4037"/>
+        <rect x="85" y="350" width="6" height="120" fill="#6D4C41" opacity="0.4"/>
+        <circle cx="90" cy="300" r="55" fill="#1B5E20"/>
+        <circle cx="60" cy="320" r="40" fill="#2E7D32"/>
+        <circle cx="120" cy="315" r="40" fill="#388E3C"/>
+        <circle cx="90" cy="285" r="42" fill="#43A047"/>
+        <circle cx="75" cy="295" r="20" fill="#4CAF50" opacity="0.6"/>
+        <rect x="200" y="380" width="18" height="90" rx="4" fill="#5D4037"/>
+        <circle cx="210" cy="340" r="45" fill="#2E7D32"/>
+        <circle cx="210" cy="320" r="35" fill="#43A047"/>
+        <!-- Right bank trees -->
+        <rect x="1350" y="360" width="20" height="110" rx="5" fill="#5D4037"/>
+        <circle cx="1360" cy="310" r="50" fill="#1B5E20"/>
+        <circle cx="1330" cy="330" r="38" fill="#2E7D32"/>
+        <circle cx="1390" cy="325" r="38" fill="#388E3C"/>
+        <circle cx="1360" cy="295" r="40" fill="#43A047"/>
+        <rect x="1450" y="390" width="16" height="80" rx="4" fill="#5D4037"/>
+        <circle cx="1458" cy="350" r="40" fill="#2E7D32"/>
+        <circle cx="1458" cy="335" r="32" fill="#388E3C"/>
+        <!-- Upper bank -->
+        <rect x="0" y="440" width="1600" height="40" fill="#4CAF50"/>
+        <ellipse cx="400" cy="440" rx="200" ry="20" fill="#66BB6A"/>
+        <ellipse cx="1200" cy="440" rx="200" ry="20" fill="#66BB6A"/>
+        <!-- River -->
+        <rect x="0" y="470" width="1600" height="280" fill="url(#s2-water)"/>
+        <!-- Water ripples -->
+        <g opacity="0.15">
+          <rect x="0" y="500" width="3200" height="8" rx="4" fill="white">
+            <animate attributeName="x" values="0;-1600" dur="5s" repeatCount="indefinite"/>
+          </rect>
+          <rect x="0" y="560" width="3200" height="6" rx="3" fill="white">
+            <animate attributeName="x" values="-800;-2400" dur="7s" repeatCount="indefinite"/>
+          </rect>
+          <rect x="0" y="620" width="3200" height="8" rx="4" fill="white">
+            <animate attributeName="x" values="-400;-2000" dur="6s" repeatCount="indefinite"/>
+          </rect>
+          <rect x="0" y="680" width="3200" height="6" rx="3" fill="white">
+            <animate attributeName="x" values="-1200;-2800" dur="8s" repeatCount="indefinite"/>
+          </rect>
+        </g>
+        <!-- Fish jumping -->
+        <g opacity="0.3">
+          <path d="M400,520 Q410,490 420,520 L410,515 Z" fill="#FFB74D">
+            <animate attributeName="opacity" values="0;0.5;0" dur="4s" repeatCount="indefinite"/>
+          </path>
+        </g>
+        <!-- Lower bank -->
+        <rect x="0" y="740" width="1600" height="30" fill="#388E3C"/>
+        <rect x="0" y="760" width="1600" height="240" fill="#2E7D32"/>
+        <!-- Bank flowers -->
+        <circle cx="100" cy="460" r="5" fill="#F06292"/>
+        <circle cx="250" cy="455" r="4" fill="#FFEE58"/>
+        <circle cx="1350" cy="458" r="5" fill="#BA68C8"/>
+        <circle cx="1500" cy="462" r="4" fill="#EF5350"/>
+        <!-- Stone arch bridge -->
+        <rect x="550" y="440" width="40" height="320" rx="5" fill="#9E9E9E"/>
+        <rect x="555" y="440" width="30" height="320" fill="#BDBDBD"/>
+        <rect x="1010" y="440" width="40" height="320" rx="5" fill="#9E9E9E"/>
+        <rect x="1015" y="440" width="30" height="320" fill="#BDBDBD"/>
+        <path d="M560 470 Q800 360 1040 470" stroke="#757575" stroke-width="20" fill="none"/>
+        <path d="M565 470 Q800 365 1035 470" stroke="#BDBDBD" stroke-width="12" fill="none"/>
+        <rect x="540" y="460" width="520" height="20" rx="4" fill="#8D6E63"/>
+        <rect x="545" y="462" width="510" height="6" fill="#A1887F"/>
+        <!-- Bridge rails -->
+        <rect x="545" y="440" width="8" height="25" rx="2" fill="#6D4C41"/>
+        <rect x="610" y="440" width="8" height="25" rx="2" fill="#6D4C41"/>
+        <rect x="675" y="440" width="8" height="25" rx="2" fill="#6D4C41"/>
+        <rect x="740" y="440" width="8" height="25" rx="2" fill="#6D4C41"/>
+        <rect x="805" y="440" width="8" height="25" rx="2" fill="#6D4C41"/>
+        <rect x="870" y="440" width="8" height="25" rx="2" fill="#6D4C41"/>
+        <rect x="935" y="440" width="8" height="25" rx="2" fill="#6D4C41"/>
+        <rect x="1000" y="440" width="8" height="25" rx="2" fill="#6D4C41"/>
+        <rect x="1045" y="440" width="8" height="25" rx="2" fill="#6D4C41"/>
+        <path d="M548 442 L1052 442" stroke="#A1887F" stroke-width="4" fill="none"/>
+        <!-- Floating leaves on water -->
+        <g opacity="0.5">
+          <ellipse cx="300" cy="540" rx="6" ry="3" fill="#66BB6A">
+            <animateTransform attributeName="transform" type="translate" values="0,0;200,10;400,5" dur="12s" repeatCount="indefinite"/>
+          </ellipse>
+          <ellipse cx="700" cy="600" rx="5" ry="3" fill="#81C784">
+            <animateTransform attributeName="transform" type="translate" values="0,0;150,8;300,3" dur="10s" repeatCount="indefinite" begin="-3s"/>
+          </ellipse>
+          <ellipse cx="1100" cy="570" rx="5" ry="2.5" fill="#A5D6A7">
+            <animateTransform attributeName="transform" type="translate" values="0,0;180,6;360,2" dur="14s" repeatCount="indefinite" begin="-7s"/>
+          </ellipse>
+        </g>
+      </svg>
+      <!-- Floating leaf particles -->
+      <div class="ambient-particle leaf-particle" style="top:50%;left:10%;animation-delay:0s"></div>
+      <div class="ambient-particle leaf-particle" style="top:55%;left:40%;animation-delay:-3s;animation-duration:9s"></div>
+      <div class="ambient-particle leaf-particle" style="top:48%;left:70%;animation-delay:-5s;animation-duration:8s"></div>
+    </div>
+
+    <div class="scene-content" style="justify-content:flex-start;padding-top:80px;">
+      <!-- Troll — friendly, round, detailed -->
+      <div class="troll-container">
+        <svg width="90" height="110" viewBox="0 0 90 110">
+          <ellipse cx="45" cy="102" rx="20" ry="6" fill="rgba(0,0,0,0.12)"/>
+          <!-- Body -->
+          <path d="M22,55 Q22,48 35,45 L55,45 Q68,48 68,55 L70,90 Q45,96 20,90 Z" fill="#8D6E63"/>
+          <path d="M22,55 Q22,48 35,45 L45,45 L45,90 Q33,92 20,90 Z" fill="#795548"/>
+          <!-- Overalls strap -->
+          <path d="M30,48 L35,70 L55,70 L60,48" fill="none" stroke="#5D4037" stroke-width="3"/>
+          <rect x="33" y="65" width="24" height="22" rx="4" fill="#5D4037"/>
+          <!-- Arms -->
+          <path d="M20,58 Q12,64 10,76 Q9,80 12,82" fill="#8D6E63"/>
+          <path d="M68,58 Q76,64 78,76 Q79,80 76,82" fill="#795548"/>
+          <circle cx="12" cy="81" r="6" fill="#A1887F"/>
+          <circle cx="76" cy="81" r="6" fill="#A1887F"/>
+          <!-- Head — big, round, friendly -->
+          <ellipse cx="45" cy="32" rx="24" ry="22" fill="#A1887F"/>
+          <!-- Ears -->
+          <ellipse cx="20" cy="30" rx="6" ry="8" fill="#A1887F"/>
+          <ellipse cx="20" cy="30" rx="4" ry="5" fill="#8D6E63"/>
+          <ellipse cx="70" cy="30" rx="6" ry="8" fill="#A1887F"/>
+          <ellipse cx="70" cy="30" rx="4" ry="5" fill="#8D6E63"/>
+          <!-- Eyes -->
+          <circle cx="36" cy="28" r="5" fill="white"/>
+          <circle cx="54" cy="28" r="5" fill="white"/>
+          <circle cx="37" cy="28.5" r="3" fill="#2E2E2E"/>
+          <circle cx="55" cy="28.5" r="3" fill="#2E2E2E"/>
+          <circle cx="38" cy="27.5" r="1.2" fill="white"/>
+          <circle cx="56" cy="27.5" r="1.2" fill="white"/>
+          <!-- Big friendly nose -->
+          <ellipse cx="45" cy="36" rx="5" ry="4" fill="#795548"/>
+          <ellipse cx="45" cy="35" rx="3.5" ry="2.5" fill="#8D6E63"/>
+          <!-- Happy grin -->
+          <path d="M34,42 Q45,52 56,42" stroke="#5D4037" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+          <path d="M36,43 Q45,50 54,43" fill="#FFCC80" opacity="0.3"/>
+          <!-- Hat -->
+          <rect x="27" y="12" width="36" height="14" rx="4" fill="#FF9800"/>
+          <rect x="24" y="22" width="42" height="6" rx="3" fill="#FF9800"/>
+          <rect x="22" y="25" width="46" height="4" rx="2" fill="#F57C00"/>
+        </svg>
+      </div>
+
+      <div class="challenge-panel" id="math-panel">
+        <div class="challenge-question" id="math-question"></div>
+        <div class="challenge-visual" id="math-visual"></div>
+        <div class="answer-options" id="math-answers"></div>
+        <div class="feedback-text" id="math-feedback"></div>
+      </div>
+    </div>
+
+    <div class="narrative-box">
+      <div class="narrative-text" id="narrative-2a"></div>
+      <div class="tap-hint" id="tap-hint-2a">tap to continue</div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════
+       SCENE 2B: MEADOW DISCOVERY
+       ═════════════════════════════════════ -->
+  <div class="scene" id="scene-2b">
+    <div class="scene-bg">
+      <svg class="bg-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="s2b-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#64B5F6"/>
+            <stop offset="50%" stop-color="#81D4FA"/>
+            <stop offset="100%" stop-color="#B3E5FC"/>
+          </linearGradient>
+        </defs>
+        <rect width="1600" height="1000" fill="url(#s2b-sky)"/>
+        <circle cx="250" cy="100" r="45" fill="#FFD54F" opacity="0.8">
+          <animate attributeName="r" values="43;47;43" dur="3s" repeatCount="indefinite"/>
+        </circle>
+        <!-- Clouds (drifting) -->
+        <g opacity="0.7" class="scene-cloud-drift">
+          <ellipse cx="600" cy="90" rx="75" ry="32" fill="white"/>
+          <ellipse cx="560" cy="82" rx="48" ry="25" fill="white"/>
+          <ellipse cx="645" cy="85" rx="52" ry="24" fill="white"/>
+        </g>
+        <g opacity="0.5" class="scene-cloud-drift c2">
+          <ellipse cx="1100" cy="120" rx="65" ry="28" fill="white"/>
+          <ellipse cx="1065" cy="114" rx="42" ry="22" fill="white"/>
+          <ellipse cx="1140" cy="116" rx="45" ry="20" fill="white"/>
+        </g>
+        <!-- Rolling hills -->
+        <ellipse cx="400" cy="500" rx="500" ry="90" fill="#A5D6A7" opacity="0.5"/>
+        <ellipse cx="1200" cy="490" rx="450" ry="80" fill="#81C784" opacity="0.5"/>
+        <ellipse cx="800" cy="560" rx="900" ry="120" fill="#66BB6A"/>
+        <rect x="0" y="560" width="1600" height="440" fill="#4CAF50"/>
+        <rect x="0" y="640" width="1600" height="360" fill="#43A047"/>
+        <!-- Rich wildflower field -->
+        <g>
+          <circle cx="100" cy="580" r="6" fill="#F06292"/>
+          <circle cx="180" cy="570" r="5" fill="#BA68C8"/>
+          <circle cx="280" cy="590" r="7" fill="#FFB74D"/>
+          <circle cx="380" cy="575" r="5" fill="#EF5350"/>
+          <circle cx="500" cy="585" r="6" fill="#64B5F6"/>
+          <circle cx="620" cy="572" r="5" fill="#FFEE58"/>
+          <circle cx="750" cy="590" r="7" fill="#F06292"/>
+          <circle cx="880" cy="578" r="5" fill="#CE93D8"/>
+          <circle cx="1000" cy="588" r="6" fill="#FFB74D"/>
+          <circle cx="1120" cy="575" r="5" fill="#EF5350"/>
+          <circle cx="1250" cy="585" r="7" fill="#64B5F6"/>
+          <circle cx="1380" cy="572" r="5" fill="#BA68C8"/>
+          <circle cx="1500" cy="590" r="6" fill="#FFEE58"/>
+        </g>
+      </svg>
+      <!-- Butterflies -->
+      <svg class="butterfly" style="top:20%;left:15%;width:30px;height:30px" viewBox="0 0 30 30">
+        <ellipse cx="10" cy="12" rx="8" ry="10" fill="#E040FB" opacity="0.8">
+          <animate attributeName="rx" values="8;3;8" dur="0.5s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="20" cy="12" rx="8" ry="10" fill="#E040FB" opacity="0.8">
+          <animate attributeName="rx" values="8;3;8" dur="0.5s" repeatCount="indefinite"/>
+        </ellipse>
+        <rect x="14" y="5" width="2" height="20" rx="1" fill="#4A148C"/>
+      </svg>
+      <svg class="butterfly" style="top:30%;right:20%;width:25px;height:25px;animation-delay:-3s;animation-duration:10s" viewBox="0 0 30 30">
+        <ellipse cx="10" cy="12" rx="8" ry="10" fill="#FFD54F" opacity="0.8">
+          <animate attributeName="rx" values="8;3;8" dur="0.6s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="20" cy="12" rx="8" ry="10" fill="#FFD54F" opacity="0.8">
+          <animate attributeName="rx" values="8;3;8" dur="0.6s" repeatCount="indefinite"/>
+        </ellipse>
+        <rect x="14" y="5" width="2" height="20" rx="1" fill="#F57F17"/>
+      </svg>
+      <!-- Floating pollen / dandelion seeds -->
+      <div class="ambient-particle pollen-particle" style="top:40%;left:15%;animation-delay:0s"></div>
+      <div class="ambient-particle pollen-particle" style="top:30%;left:35%;animation-delay:-2s;animation-duration:10s"></div>
+      <div class="ambient-particle pollen-particle" style="top:45%;left:55%;animation-delay:-4s;animation-duration:9s"></div>
+      <div class="ambient-particle pollen-particle" style="top:35%;left:75%;animation-delay:-6s;animation-duration:11s"></div>
+      <div class="ambient-particle pollen-particle" style="top:50%;left:25%;animation-delay:-1s;animation-duration:7s"></div>
+      <div class="ambient-particle pollen-particle" style="top:25%;left:65%;animation-delay:-3s;animation-duration:12s"></div>
+    </div>
+
+    <div class="wonder-items-bar" id="wonder-bar">
+      <div class="wonder-slot" id="wonder-0">?</div>
+      <div class="wonder-slot" id="wonder-1">?</div>
+      <div class="wonder-slot" id="wonder-2">?</div>
+    </div>
+
+    <div class="scene-content">
+      <div class="discoverable" id="discover-feather" style="top:35%;left:20%" onclick="collectItem('feather')">
+        <svg width="50" height="60" viewBox="0 0 50 60">
+          <path d="M25 5 Q10 20 15 40 Q18 50 25 55 Q32 50 35 40 Q40 20 25 5Z" fill="#42A5F5" stroke="#1E88E5" stroke-width="1.5"/>
+          <line x1="25" y1="8" x2="25" y2="55" stroke="#1E88E5" stroke-width="1.5"/>
+          <path d="M25 15 Q18 22 20 30" stroke="#64B5F6" stroke-width="0.8" fill="none"/>
+          <path d="M25 15 Q32 22 30 30" stroke="#64B5F6" stroke-width="0.8" fill="none"/>
+          <path d="M25 25 Q18 32 20 40" stroke="#64B5F6" stroke-width="0.8" fill="none"/>
+          <path d="M25 25 Q32 32 30 40" stroke="#64B5F6" stroke-width="0.8" fill="none"/>
+        </svg>
+      </div>
+
+      <div class="discoverable" id="discover-stone" style="top:55%;right:25%" onclick="collectItem('stone')">
+        <svg width="50" height="45" viewBox="0 0 50 45">
+          <ellipse cx="25" cy="30" rx="22" ry="14" fill="#78909C"/>
+          <ellipse cx="25" cy="28" rx="20" ry="12" fill="#90A4AE"/>
+          <ellipse cx="20" cy="25" rx="8" ry="5" fill="#B0BEC5" opacity="0.6"/>
+          <circle cx="30" cy="22" r="3" fill="white" opacity="0.3"/>
+          <circle cx="32" cy="20" r="2" fill="#FFD700" opacity="0.8">
+            <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.5s" repeatCount="indefinite"/>
+          </circle>
+        </svg>
+      </div>
+
+      <div class="discoverable" id="discover-flower" style="bottom:35%;left:55%" onclick="collectItem('flower')">
+        <svg width="50" height="65" viewBox="0 0 50 65">
+          <rect x="23" y="35" width="4" height="28" rx="2" fill="#43A047"/>
+          <ellipse cx="17" cy="52" rx="10" ry="5" fill="#66BB6A" transform="rotate(-30 17 52)"/>
+          <circle cx="25" cy="22" r="10" fill="#F06292"/>
+          <circle cx="17" cy="18" r="8" fill="#EC407A"/>
+          <circle cx="33" cy="18" r="8" fill="#EC407A"/>
+          <circle cx="17" cy="28" r="8" fill="#F48FB1"/>
+          <circle cx="33" cy="28" r="8" fill="#F48FB1"/>
+          <circle cx="25" cy="22" r="5" fill="#FFD54F"/>
+        </svg>
+      </div>
+
+      <!-- Pip in scene -->
+      <svg style="position:absolute;bottom:22%;right:12%;z-index:10" width="55" height="65" viewBox="0 0 55 70">
+        <ellipse cx="27" cy="65" rx="16" ry="4" fill="rgba(0,0,0,0.1)"/>
+        <ellipse cx="27" cy="44" rx="20" ry="18" fill="#66BB6A"/>
+        <ellipse cx="27" cy="48" rx="14" ry="12" fill="#A5D6A7"/>
+        <circle cx="18" cy="28" r="10" fill="#66BB6A"/>
+        <circle cx="36" cy="28" r="10" fill="#66BB6A"/>
+        <circle cx="18" cy="27" r="7" fill="white"/>
+        <circle cx="36" cy="27" r="7" fill="white"/>
+        <circle cx="20" cy="26" r="4.5" fill="#2E2E2E"/>
+        <circle cx="38" cy="26" r="4.5" fill="#2E2E2E"/>
+        <circle cx="21.5" cy="24.5" r="2" fill="white"/>
+        <circle cx="39.5" cy="24.5" r="2" fill="white"/>
+        <path d="M16,40 Q27,48 38,40" stroke="#2E7D32" stroke-width="2" fill="none"/>
+      </svg>
+    </div>
+
+    <div class="narrative-box">
+      <div class="narrative-text" id="narrative-2b"></div>
+      <div class="tap-hint" id="tap-hint-2b">tap to continue</div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════
+       SCENE 3: THE WORD FOREST
+       ═════════════════════════════════════ -->
+  <div class="scene" id="scene-3">
+    <div class="scene-bg">
+      <svg class="bg-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="s3-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#1B5E20"/>
+            <stop offset="30%" stop-color="#2E7D32"/>
+            <stop offset="60%" stop-color="#33691E"/>
+            <stop offset="100%" stop-color="#1B5E20"/>
+          </linearGradient>
+          <radialGradient id="s3-light" cx="45%" cy="10%" r="50%">
+            <stop offset="0%" stop-color="#FFD700" stop-opacity="0.25"/>
+            <stop offset="50%" stop-color="#FFD700" stop-opacity="0.08"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </radialGradient>
+          <linearGradient id="s3-ray" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#FFD700" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="#FFD700" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <rect width="1600" height="1000" fill="url(#s3-sky)"/>
+        <rect width="1600" height="1000" fill="url(#s3-light)"/>
+        <!-- Detailed tree trunks with texture -->
+        <g>
+          <rect x="60" y="100" width="35" height="600" rx="8" fill="#4E342E"/>
+          <rect x="65" y="100" width="10" height="600" fill="#5D4037" opacity="0.5"/>
+          <rect x="250" y="50" width="30" height="700" rx="6" fill="#3E2723"/>
+          <rect x="255" y="50" width="8" height="700" fill="#4E342E" opacity="0.4"/>
+          <rect x="450" y="120" width="28" height="580" rx="6" fill="#4E342E"/>
+          <rect x="700" y="80" width="32" height="620" rx="7" fill="#3E2723"/>
+          <rect x="705" y="80" width="10" height="620" fill="#4E342E" opacity="0.4"/>
+          <rect x="950" y="100" width="30" height="600" rx="6" fill="#4E342E"/>
+          <rect x="1150" y="60" width="35" height="640" rx="7" fill="#3E2723"/>
+          <rect x="1155" y="60" width="10" height="640" fill="#4E342E" opacity="0.4"/>
+          <rect x="1350" y="110" width="28" height="590" rx="6" fill="#4E342E"/>
+          <rect x="1500" y="80" width="32" height="620" rx="7" fill="#3E2723"/>
+          <!-- Roots at base of trees -->
+          <path d="M50,700 Q60,690 77,695 Q90,690 100,700" fill="#4E342E"/>
+          <path d="M240,750 Q250,738 265,742 Q280,738 285,750" fill="#3E2723"/>
+          <path d="M690,700 Q700,688 716,692 Q730,688 740,700" fill="#3E2723"/>
+        </g>
+        <!-- Tree canopies -->
+        <circle cx="80" cy="120" r="80" fill="#1B5E20"/>
+        <circle cx="80" cy="90" r="65" fill="#2E7D32"/>
+        <circle cx="265" cy="70" r="90" fill="#1B5E20"/>
+        <circle cx="265" cy="40" r="70" fill="#2E7D32" opacity="0.8"/>
+        <circle cx="465" cy="130" r="75" fill="#1B5E20"/>
+        <circle cx="465" cy="105" r="60" fill="#388E3C"/>
+        <circle cx="715" cy="100" r="85" fill="#1B5E20"/>
+        <circle cx="715" cy="70" r="68" fill="#2E7D32" opacity="0.8"/>
+        <circle cx="965" cy="120" r="78" fill="#1B5E20"/>
+        <circle cx="965" cy="90" r="62" fill="#388E3C"/>
+        <circle cx="1168" cy="80" r="88" fill="#1B5E20"/>
+        <circle cx="1168" cy="50" r="70" fill="#2E7D32" opacity="0.8"/>
+        <circle cx="1365" cy="125" r="72" fill="#1B5E20"/>
+        <circle cx="1365" cy="100" r="58" fill="#388E3C"/>
+        <circle cx="1515" cy="95" r="82" fill="#1B5E20"/>
+        <circle cx="1515" cy="68" r="65" fill="#2E7D32" opacity="0.8"/>
+        <!-- Tree canopies (subtle sway) -->
+        <g class="svg-sway-slow" style="animation-delay:-1s">
+          <circle cx="80" cy="120" r="15" fill="#2E7D32" opacity="0.3"/>
+          <circle cx="265" cy="70" r="15" fill="#2E7D32" opacity="0.3"/>
+          <circle cx="715" cy="100" r="15" fill="#2E7D32" opacity="0.3"/>
+          <circle cx="1168" cy="80" r="15" fill="#2E7D32" opacity="0.3"/>
+        </g>
+        <!-- Light rays through canopy -->
+        <polygon points="450,0 470,0 550,600 500,600" fill="url(#s3-ray)" opacity="0.6" style="animation: ray-shift 8s ease-in-out infinite; transform-origin: top center"/>
+        <polygon points="800,0 815,0 870,600 840,600" fill="url(#s3-ray)" opacity="0.5" style="animation: ray-shift 10s ease-in-out infinite 2s; transform-origin: top center"/>
+        <polygon points="1100,0 1112,0 1150,600 1120,600" fill="url(#s3-ray)" opacity="0.4" style="animation: ray-shift 12s ease-in-out infinite 4s; transform-origin: top center"/>
+        <!-- Hanging word fruits -->
+        <g>
+          <line x1="150" y1="180" x2="150" y2="230" stroke="#4E342E" stroke-width="2"/>
+          <rect x="125" y="225" width="55" height="28" rx="14" fill="#FF9800" opacity="0.9"/>
+          <text x="152" y="245" fill="white" font-size="15" font-weight="bold" text-anchor="middle" font-family="sans-serif">cat</text>
+          <line x1="550" y1="200" x2="550" y2="255" stroke="#4E342E" stroke-width="2"/>
+          <rect x="520" y="250" width="65" height="28" rx="14" fill="#AB47BC" opacity="0.9"/>
+          <text x="552" y="270" fill="white" font-size="15" font-weight="bold" text-anchor="middle" font-family="sans-serif">read</text>
+          <line x1="850" y1="170" x2="850" y2="220" stroke="#4E342E" stroke-width="2"/>
+          <rect x="822" y="215" width="60" height="28" rx="14" fill="#66BB6A" opacity="0.9"/>
+          <text x="852" y="235" fill="white" font-size="15" font-weight="bold" text-anchor="middle" font-family="sans-serif">sun</text>
+          <line x1="1250" y1="190" x2="1250" y2="240" stroke="#4E342E" stroke-width="2"/>
+          <rect x="1220" y="235" width="65" height="28" rx="14" fill="#42A5F5" opacity="0.9"/>
+          <text x="1252" y="255" fill="white" font-size="15" font-weight="bold" text-anchor="middle" font-family="sans-serif">tree</text>
+        </g>
+        <!-- Forest floor -->
+        <rect x="0" y="700" width="1600" height="300" fill="#1B5E20"/>
+        <rect x="0" y="730" width="1600" height="270" fill="#1A3A1A"/>
+        <!-- Mushrooms -->
+        <g>
+          <ellipse cx="200" cy="720" rx="15" ry="8" fill="#EF5350"/>
+          <rect x="196" y="720" width="8" height="15" rx="2" fill="#FFCC80"/>
+          <circle cx="195" cy="717" r="3" fill="white" opacity="0.6"/>
+          <circle cx="205" cy="715" r="2" fill="white" opacity="0.5"/>
+          <ellipse cx="1300" cy="715" rx="12" ry="7" fill="#FF9800"/>
+          <rect x="1296" y="715" width="7" height="12" rx="2" fill="#FFCC80"/>
+          <circle cx="1295" cy="713" r="2.5" fill="white" opacity="0.5"/>
+          <!-- Extra mushroom cluster -->
+          <ellipse cx="600" cy="725" rx="10" ry="6" fill="#CE93D8"/>
+          <rect x="597" y="725" width="6" height="10" rx="2" fill="#FFCC80"/>
+          <ellipse cx="615" cy="728" rx="8" ry="5" fill="#BA68C8"/>
+          <rect x="612" y="728" width="5" height="8" rx="2" fill="#FFCC80"/>
+        </g>
+        <!-- Ferns and undergrowth (swaying) -->
+        <g opacity="0.5">
+          <g class="svg-sway" style="animation-delay:-0.3s"><path d="M380,720 Q390,700 400,720 Q410,705 420,720" fill="#2E7D32"/></g>
+          <g class="svg-sway" style="animation-delay:-1.5s"><path d="M800,715 Q812,695 824,715 Q836,700 848,715" fill="#1B5E20"/></g>
+          <g class="svg-sway" style="animation-delay:-2.8s"><path d="M1100,722 Q1110,702 1120,722 Q1130,708 1140,722" fill="#2E7D32"/></g>
+        </g>
+      </svg>
+      <!-- Fireflies (enhanced with pulse+drift) -->
+      <div class="firefly-enhanced" style="top:25%;left:30%;animation-delay:0s"></div>
+      <div class="firefly-enhanced" style="top:40%;left:55%;animation-delay:-1s"></div>
+      <div class="firefly-enhanced" style="top:35%;right:25%;animation-delay:-2s"></div>
+      <div class="firefly-enhanced" style="top:20%;right:35%;animation-delay:-0.5s"></div>
+      <div class="firefly-enhanced" style="top:50%;left:20%;animation-delay:-1.5s"></div>
+      <div class="firefly-enhanced" style="top:30%;left:45%;animation-delay:-3s"></div>
+      <div class="firefly-enhanced" style="top:15%;left:65%;animation-delay:-2.5s"></div>
+      <div class="firefly-enhanced" style="top:45%;right:15%;animation-delay:-4s"></div>
+      <!-- Falling leaf particles -->
+      <div class="ambient-particle leaf-particle" style="top:5%;left:20%;animation-delay:0s"></div>
+      <div class="ambient-particle leaf-particle" style="top:8%;left:45%;animation-delay:-2s;animation-duration:9s"></div>
+      <div class="ambient-particle leaf-particle" style="top:3%;left:70%;animation-delay:-4s;animation-duration:8s"></div>
+      <div class="ambient-particle leaf-particle" style="top:10%;left:85%;animation-delay:-6s;animation-duration:10s"></div>
+      <div class="ambient-particle leaf-particle" style="top:2%;left:35%;animation-delay:-1s;animation-duration:11s"></div>
+    </div>
+
+    <!-- Owl — detailed, wise -->
+    <div class="owl-container">
+      <svg width="80" height="95" viewBox="0 0 80 95">
+        <ellipse cx="40" cy="88" rx="14" ry="5" fill="rgba(0,0,0,0.1)"/>
+        <!-- Branch -->
+        <rect x="5" y="78" width="70" height="8" rx="4" fill="#5D4037"/>
+        <rect x="5" y="78" width="70" height="3" fill="#6D4C41"/>
+        <!-- Body -->
+        <ellipse cx="40" cy="56" rx="24" ry="28" fill="#8D6E63"/>
+        <ellipse cx="40" cy="62" rx="18" ry="16" fill="#A1887F"/>
+        <!-- Belly pattern -->
+        <path d="M30,52 Q40,48 50,52 Q48,58 40,60 Q32,58 30,52" fill="#BCAAA4" opacity="0.5"/>
+        <path d="M32,58 Q40,55 48,58 Q46,64 40,66 Q34,64 32,58" fill="#BCAAA4" opacity="0.4"/>
+        <!-- Wings -->
+        <ellipse cx="16" cy="52" rx="12" ry="20" fill="#795548" transform="rotate(-10 16 52)"/>
+        <ellipse cx="64" cy="52" rx="12" ry="20" fill="#795548" transform="rotate(10 64 52)"/>
+        <!-- Wing feather marks -->
+        <path d="M10,42 Q16,40 14,46" stroke="#6D4C41" stroke-width="1" fill="none"/>
+        <path d="M10,48 Q16,46 14,52" stroke="#6D4C41" stroke-width="1" fill="none"/>
+        <path d="M70,42 Q64,40 66,46" stroke="#6D4C41" stroke-width="1" fill="none"/>
+        <path d="M70,48 Q64,46 66,52" stroke="#6D4C41" stroke-width="1" fill="none"/>
+        <!-- Face disc -->
+        <circle cx="30" cy="38" r="12" fill="#D7CCC8"/>
+        <circle cx="50" cy="38" r="12" fill="#D7CCC8"/>
+        <!-- Eyes — big and wise -->
+        <circle cx="30" cy="38" r="8" fill="white"/>
+        <circle cx="50" cy="38" r="8" fill="white"/>
+        <circle cx="30" cy="38" r="5" fill="#FF8F00"/>
+        <circle cx="50" cy="38" r="5" fill="#FF8F00"/>
+        <circle cx="30" cy="37" r="3.5" fill="#2E2E2E"/>
+        <circle cx="50" cy="37" r="3.5" fill="#2E2E2E"/>
+        <circle cx="31.5" cy="36" r="1.5" fill="white"/>
+        <circle cx="51.5" cy="36" r="1.5" fill="white"/>
+        <!-- Beak -->
+        <polygon points="40,42 36,48 44,48" fill="#FF8F00"/>
+        <polygon points="40,43 37,47 43,47" fill="#FFB300"/>
+        <!-- Ear tufts -->
+        <polygon points="22,28 18,14 28,26" fill="#795548"/>
+        <polygon points="58,28 62,14 52,26" fill="#795548"/>
+        <!-- Face outline -->
+        <circle cx="30" cy="38" r="12" fill="none" stroke="#5D4037" stroke-width="2"/>
+        <circle cx="50" cy="38" r="12" fill="none" stroke="#5D4037" stroke-width="2"/>
+        <path d="M42,38 Q40,40 38,38" stroke="#5D4037" stroke-width="2" fill="none"/>
+        <!-- Feet -->
+        <g transform="translate(30,78)">
+          <line x1="0" y1="0" x2="-4" y2="5" stroke="#FF8F00" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="0" y1="0" x2="0" y2="6" stroke="#FF8F00" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="0" y1="0" x2="4" y2="5" stroke="#FF8F00" stroke-width="2.5" stroke-linecap="round"/>
+        </g>
+        <g transform="translate(50,78)">
+          <line x1="0" y1="0" x2="-4" y2="5" stroke="#FF8F00" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="0" y1="0" x2="0" y2="6" stroke="#FF8F00" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="0" y1="0" x2="4" y2="5" stroke="#FF8F00" stroke-width="2.5" stroke-linecap="round"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="scene-content" style="justify-content:flex-start;padding-top:80px;">
+      <div class="phonics-panel" id="phonics-panel">
+        <div class="challenge-question" id="phonics-question"></div>
+        <div id="phonics-content"></div>
+        <div class="feedback-text" id="phonics-feedback"></div>
+      </div>
+    </div>
+
+    <div class="narrative-box">
+      <div class="narrative-text" id="narrative-3"></div>
+      <div class="tap-hint" id="tap-hint-3">tap to continue</div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════
+       SCENE 4: THE CRYSTAL CAVE
+       ═════════════════════════════════════ -->
+  <div class="scene" id="scene-4">
+    <div class="scene-bg">
+      <svg class="bg-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="s4-bg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#0d0d2b"/>
+            <stop offset="40%" stop-color="#16213e"/>
+            <stop offset="70%" stop-color="#1a1a3e"/>
+            <stop offset="100%" stop-color="#0d0d2b"/>
+          </linearGradient>
+          <radialGradient id="s4-glow-purple" cx="30%" cy="50%" r="30%">
+            <stop offset="0%" stop-color="#CE93D8" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </radialGradient>
+          <radialGradient id="s4-glow-blue" cx="70%" cy="40%" r="25%">
+            <stop offset="0%" stop-color="#64B5F6" stop-opacity="0.12"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </radialGradient>
+        </defs>
+        <rect width="1600" height="1000" fill="url(#s4-bg)"/>
+        <rect width="1600" height="1000" fill="url(#s4-glow-purple)"/>
+        <rect width="1600" height="1000" fill="url(#s4-glow-blue)"/>
+        <!-- Ceiling stalactites -->
+        <polygon points="0,0 1600,0 1600,80 1500,120 1400,60 1300,130 1200,70 1100,110 1000,50 900,120 800,65 700,100 600,55 500,115 400,70 300,105 200,50 100,95 0,60" fill="#0d0d2b"/>
+        <polygon points="100,0 115,120 130,0" fill="#16213e" opacity="0.8"/>
+        <polygon points="300,0 312,100 324,0" fill="#0d0d2b" opacity="0.9"/>
+        <polygon points="550,0 560,140 570,0" fill="#16213e" opacity="0.7"/>
+        <polygon points="800,0 812,110 824,0" fill="#0d0d2b" opacity="0.8"/>
+        <polygon points="1050,0 1060,90 1070,0" fill="#16213e" opacity="0.7"/>
+        <polygon points="1300,0 1310,120 1320,0" fill="#0d0d2b" opacity="0.8"/>
+        <!-- Crystal clusters (pulsing inner glow) -->
+        <g style="animation: crystal-inner-glow 4s ease-in-out infinite; color: #AB47BC">
+          <polygon points="120,600 145,400 170,600" fill="#AB47BC" opacity="0.9"/>
+          <polygon points="145,400 170,600 155,400" fill="#CE93D8" opacity="0.4"/>
+          <polygon points="90,620 110,450 130,620" fill="#9C27B0" opacity="0.8"/>
+          <polygon points="160,610 178,440 196,610" fill="#BA68C8" opacity="0.85"/>
+          <line x1="140" y1="420" x2="140" y2="550" stroke="white" stroke-width="1" opacity="0.1"/>
+        </g>
+        <g style="animation: crystal-inner-glow 5s ease-in-out infinite 1s; color: #42A5F5">
+          <polygon points="1300,580 1330,380 1360,580" fill="#42A5F5" opacity="0.9"/>
+          <polygon points="1330,380 1360,580 1345,400" fill="#90CAF9" opacity="0.4"/>
+          <polygon points="1270,600 1295,430 1320,600" fill="#1E88E5" opacity="0.8"/>
+          <polygon points="1350,590 1375,420 1400,590" fill="#64B5F6" opacity="0.85"/>
+        </g>
+        <g style="animation: crystal-inner-glow 4.5s ease-in-out infinite 0.5s; color: #66BB6A">
+          <polygon points="700,650 720,500 740,650" fill="#66BB6A" opacity="0.8"/>
+          <polygon points="720,500 740,650 730,520" fill="#A5D6A7" opacity="0.3"/>
+        </g>
+        <g style="animation: crystal-inner-glow 3.5s ease-in-out infinite 1.5s; color: #F06292">
+          <polygon points="850,640 870,510 890,640" fill="#F06292" opacity="0.8"/>
+          <polygon points="870,510 890,640 878,530" fill="#F48FB1" opacity="0.3"/>
+        </g>
+        <!-- Glowing auras (pulsing) -->
+        <ellipse cx="145" cy="500" rx="60" ry="100" fill="#AB47BC" opacity="0.05">
+          <animate attributeName="opacity" values="0.03;0.08;0.03" dur="4s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="1330" cy="480" rx="60" ry="100" fill="#42A5F5" opacity="0.05">
+          <animate attributeName="opacity" values="0.03;0.08;0.03" dur="5s" repeatCount="indefinite" begin="1s"/>
+        </ellipse>
+        <ellipse cx="720" cy="570" rx="40" ry="80" fill="#66BB6A" opacity="0.04">
+          <animate attributeName="opacity" values="0.02;0.07;0.02" dur="4.5s" repeatCount="indefinite" begin="0.5s"/>
+        </ellipse>
+        <ellipse cx="870" cy="570" rx="40" ry="80" fill="#F06292" opacity="0.04">
+          <animate attributeName="opacity" values="0.02;0.07;0.02" dur="3.5s" repeatCount="indefinite" begin="1.5s"/>
+        </ellipse>
+        <!-- Stalactite water drips -->
+        <circle cx="115" cy="120" r="2" fill="rgba(100,200,255,0.6)">
+          <animate attributeName="cy" values="120;220;220" dur="3s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0;0.7;0" dur="3s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="560" cy="140" r="1.5" fill="rgba(100,200,255,0.5)">
+          <animate attributeName="cy" values="140;260;260" dur="4s" repeatCount="indefinite" begin="1.5s"/>
+          <animate attributeName="opacity" values="0;0.6;0" dur="4s" repeatCount="indefinite" begin="1.5s"/>
+        </circle>
+        <circle cx="1310" cy="120" r="2" fill="rgba(100,200,255,0.5)">
+          <animate attributeName="cy" values="120;240;240" dur="3.5s" repeatCount="indefinite" begin="0.8s"/>
+          <animate attributeName="opacity" values="0;0.6;0" dur="3.5s" repeatCount="indefinite" begin="0.8s"/>
+        </circle>
+        <!-- Stone door -->
+        <rect x="680" y="200" width="240" height="320" rx="120" fill="#3E2723"/>
+        <rect x="690" y="210" width="220" height="310" rx="110" fill="#4E342E"/>
+        <!-- Door symbols -->
+        <circle cx="800" cy="300" r="20" fill="none" stroke="#FFD700" stroke-width="2" opacity="0.6">
+          <animate attributeName="opacity" values="0.4;0.8;0.4" dur="3s" repeatCount="indefinite"/>
+        </circle>
+        <polygon points="800,340 785,365 815,365" fill="none" stroke="#FFD700" stroke-width="2" opacity="0.5">
+          <animate attributeName="opacity" values="0.3;0.7;0.3" dur="3s" repeatCount="indefinite" begin="0.5s"/>
+        </polygon>
+        <rect x="790" y="380" width="20" height="20" rx="2" fill="none" stroke="#FFD700" stroke-width="2" opacity="0.5">
+          <animate attributeName="opacity" values="0.3;0.7;0.3" dur="3s" repeatCount="indefinite" begin="1s"/>
+        </rect>
+        <!-- Floor -->
+        <polygon points="0,1000 0,780 100,800 200,770 300,790 400,760 500,785 600,770 700,790 800,765 900,785 1000,770 1100,790 1200,760 1300,785 1400,770 1500,790 1600,775 1600,1000" fill="#0f3460"/>
+        <polygon points="0,1000 0,830 100,850 200,820 300,840 400,810 500,835 600,820 700,840 800,815 900,835 1000,820 1100,840 1200,810 1300,835 1400,820 1500,840 1600,825 1600,1000" fill="#0d0d2b"/>
+      </svg>
+      <!-- Sparkles -->
+      <div class="cave-sparkle" style="top:15%;left:20%;animation-delay:0s"></div>
+      <div class="cave-sparkle" style="top:25%;left:60%;animation-delay:0.5s"></div>
+      <div class="cave-sparkle" style="top:35%;left:40%;animation-delay:1s"></div>
+      <div class="cave-sparkle" style="top:20%;right:20%;animation-delay:1.5s"></div>
+      <div class="cave-sparkle" style="top:45%;left:15%;animation-delay:0.8s"></div>
+      <div class="cave-sparkle" style="top:30%;right:30%;animation-delay:1.2s"></div>
+      <div class="cave-sparkle" style="top:10%;left:50%;animation-delay:0.3s"></div>
+      <div class="cave-sparkle" style="top:40%;right:10%;animation-delay:1.8s"></div>
+      <!-- Enhanced drifting sparkles -->
+      <div class="cave-sparkle-drift" style="top:20%;left:25%;animation-delay:0s"></div>
+      <div class="cave-sparkle-drift" style="top:30%;left:50%;animation-delay:-3s"></div>
+      <div class="cave-sparkle-drift" style="top:15%;right:25%;animation-delay:-5s"></div>
+      <div class="cave-sparkle-drift" style="top:35%;right:40%;animation-delay:-7s"></div>
+      <div class="cave-sparkle-drift" style="top:25%;left:70%;animation-delay:-2s"></div>
+      <!-- Stalactite drip particles -->
+      <div class="ambient-particle drip-particle" style="top:5%;left:8%;animation-delay:0s"></div>
+      <div class="ambient-particle drip-particle" style="top:3%;left:35%;animation-delay:-2s;animation-duration:5s"></div>
+      <div class="ambient-particle drip-particle" style="top:8%;right:15%;animation-delay:-1s;animation-duration:3.5s"></div>
+    </div>
+
+    <div class="scene-content" id="scene4-content">
+      <div id="crystal-picker-section" style="text-align:center">
+        <div style="color:#E0E0E0;font-size:20px;font-weight:700;margin-bottom:15px;text-shadow:0 2px 4px rgba(0,0,0,0.5)">Pick your Quest Crystal!</div>
+        <div class="crystal-picker" id="crystal-picker">
+          <div class="crystal-option" onclick="pickCrystal('red', this)" data-color="red">
+            <svg width="70" height="90" viewBox="0 0 70 90">
+              <polygon points="35,5 55,30 50,85 20,85 15,30" fill="#EF5350" stroke="#C62828" stroke-width="2"/>
+              <polygon points="35,5 55,30 35,25" fill="#F44336" opacity="0.7"/>
+              <polygon points="35,25 55,30 50,85 35,80" fill="#E53935" opacity="0.5"/>
+              <line x1="35" y1="10" x2="35" y2="75" stroke="white" stroke-width="1" opacity="0.15"/>
+              <polygon points="25,20 32,15 30,35" fill="white" opacity="0.2"/>
+            </svg>
+          </div>
+          <div class="crystal-option" onclick="pickCrystal('blue', this)" data-color="blue">
+            <svg width="70" height="90" viewBox="0 0 70 90">
+              <polygon points="35,5 55,30 50,85 20,85 15,30" fill="#42A5F5" stroke="#1565C0" stroke-width="2"/>
+              <polygon points="35,5 55,30 35,25" fill="#2196F3" opacity="0.7"/>
+              <polygon points="35,25 55,30 50,85 35,80" fill="#1E88E5" opacity="0.5"/>
+              <line x1="35" y1="10" x2="35" y2="75" stroke="white" stroke-width="1" opacity="0.15"/>
+              <polygon points="25,20 32,15 30,35" fill="white" opacity="0.2"/>
+            </svg>
+          </div>
+          <div class="crystal-option" onclick="pickCrystal('purple', this)" data-color="purple">
+            <svg width="70" height="90" viewBox="0 0 70 90">
+              <polygon points="35,5 55,30 50,85 20,85 15,30" fill="#AB47BC" stroke="#6A1B9A" stroke-width="2"/>
+              <polygon points="35,5 55,30 35,25" fill="#9C27B0" opacity="0.7"/>
+              <polygon points="35,25 55,30 50,85 35,80" fill="#8E24AA" opacity="0.5"/>
+              <line x1="35" y1="10" x2="35" y2="75" stroke="white" stroke-width="1" opacity="0.15"/>
+              <polygon points="25,20 32,15 30,35" fill="white" opacity="0.2"/>
+            </svg>
+          </div>
+          <div class="crystal-option" onclick="pickCrystal('green', this)" data-color="green">
+            <svg width="70" height="90" viewBox="0 0 70 90">
+              <polygon points="35,5 55,30 50,85 20,85 15,30" fill="#66BB6A" stroke="#2E7D32" stroke-width="2"/>
+              <polygon points="35,5 55,30 35,25" fill="#4CAF50" opacity="0.7"/>
+              <polygon points="35,25 55,30 50,85 35,80" fill="#43A047" opacity="0.5"/>
+              <line x1="35" y1="10" x2="35" y2="75" stroke="white" stroke-width="1" opacity="0.15"/>
+              <polygon points="25,20 32,15 30,35" fill="white" opacity="0.2"/>
+            </svg>
+          </div>
+          <div class="crystal-option" onclick="pickCrystal('gold', this)" data-color="gold">
+            <svg width="70" height="90" viewBox="0 0 70 90">
+              <polygon points="35,5 55,30 50,85 20,85 15,30" fill="#FFD54F" stroke="#F9A825" stroke-width="2"/>
+              <polygon points="35,5 55,30 35,25" fill="#FFC107" opacity="0.7"/>
+              <polygon points="35,25 55,30 50,85 35,80" fill="#FFB300" opacity="0.5"/>
+              <line x1="35" y1="10" x2="35" y2="75" stroke="white" stroke-width="1" opacity="0.15"/>
+              <polygon points="25,20 32,15 30,35" fill="white" opacity="0.2"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div id="path-doors-section" style="display:none;text-align:center">
+        <div style="color:#E0E0E0;font-size:20px;font-weight:700;margin-bottom:15px;text-shadow:0 2px 4px rgba(0,0,0,0.5)">Choose your path...</div>
+        <div class="path-doors">
+          <div class="door-frame glow-star" onclick="choosePath('star')">
+            <div class="door-symbol">⭐</div>
+            <div class="door-label">The Brave Path</div>
+          </div>
+          <div class="door-frame glow-book" onclick="choosePath('book')">
+            <div class="door-symbol">📖</div>
+            <div class="door-label">The Wise Path</div>
+          </div>
+          <div class="door-frame glow-leaf" onclick="choosePath('leaf')">
+            <div class="door-symbol">🌿</div>
+            <div class="door-label">The Nature Path</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="narrative-box">
+      <div class="narrative-text" id="narrative-4"></div>
+      <div class="tap-hint" id="tap-hint-4">tap to continue</div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════
+       SCENE 5: THE SECOND HATCH (FINALE)
+       ═════════════════════════════════════ -->
+  <div class="scene" id="scene-5">
+    <div class="scene-bg">
+      <svg class="bg-art" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="s5-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#FF8A65"/>
+            <stop offset="25%" stop-color="#FFAB91"/>
+            <stop offset="45%" stop-color="#FFCC80"/>
+            <stop offset="65%" stop-color="#FFE082"/>
+            <stop offset="85%" stop-color="#C8E6C9"/>
+            <stop offset="100%" stop-color="#4CAF50"/>
+          </linearGradient>
+          <radialGradient id="s5-glow" cx="50%" cy="65%" r="20%">
+            <stop offset="0%" stop-color="#FFD700" stop-opacity="0.5"/>
+            <stop offset="50%" stop-color="#FFA000" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </radialGradient>
+        </defs>
+        <rect width="1600" height="1000" fill="url(#s5-sky)"/>
+        <!-- Sunset clouds (drifting) -->
+        <g opacity="0.6" class="scene-cloud-drift" style="animation-duration:50s">
+          <ellipse cx="300" cy="100" rx="80" ry="35" fill="#FFCC80"/>
+          <ellipse cx="260" cy="92" rx="50" ry="28" fill="#FFE0B2"/>
+          <ellipse cx="345" cy="95" rx="55" ry="25" fill="#FFE082"/>
+        </g>
+        <g opacity="0.4" class="scene-cloud-drift c2" style="animation-duration:60s">
+          <ellipse cx="1200" cy="120" rx="70" ry="30" fill="#FFCC80"/>
+          <ellipse cx="1165" cy="112" rx="45" ry="24" fill="#FFE0B2"/>
+          <ellipse cx="1240" cy="116" rx="48" ry="22" fill="#FFE082"/>
+        </g>
+        <!-- Sun low on horizon -->
+        <circle cx="800" cy="280" r="60" fill="#FFD54F" opacity="0.5"/>
+        <circle cx="800" cy="280" r="40" fill="#FFE082" opacity="0.7"/>
+        <!-- Sun rays -->
+        <g opacity="0.2">
+          <line x1="800" y1="280" x2="650" y2="100" stroke="#FFD700" stroke-width="20"/>
+          <line x1="800" y1="280" x2="950" y2="100" stroke="#FFD700" stroke-width="20"/>
+          <line x1="800" y1="280" x2="500" y2="200" stroke="#FFD700" stroke-width="15"/>
+          <line x1="800" y1="280" x2="1100" y2="200" stroke="#FFD700" stroke-width="15"/>
+        </g>
+        <!-- Trees framing the clearing -->
+        <rect x="50" y="300" width="25" height="350" rx="5" fill="#5D4037"/>
+        <circle cx="62" cy="260" r="60" fill="#1B5E20"/>
+        <circle cx="40" cy="280" r="45" fill="#2E7D32"/>
+        <circle cx="90" cy="275" r="42" fill="#388E3C"/>
+        <circle cx="62" cy="245" r="45" fill="#43A047"/>
+        <rect x="180" y="330" width="20" height="320" rx="4" fill="#5D4037"/>
+        <circle cx="190" cy="290" r="50" fill="#2E7D32"/>
+        <circle cx="190" cy="270" r="38" fill="#43A047"/>
+        <rect x="1380" y="310" width="25" height="340" rx="5" fill="#5D4037"/>
+        <circle cx="1392" cy="270" r="58" fill="#1B5E20"/>
+        <circle cx="1370" cy="290" r="42" fill="#2E7D32"/>
+        <circle cx="1420" cy="282" r="40" fill="#388E3C"/>
+        <circle cx="1392" cy="255" r="44" fill="#43A047"/>
+        <rect x="1480" y="350" width="18" height="300" rx="4" fill="#5D4037"/>
+        <circle cx="1490" cy="310" r="45" fill="#2E7D32"/>
+        <circle cx="1490" cy="295" r="35" fill="#388E3C"/>
+        <!-- Ground -->
+        <ellipse cx="800" cy="620" rx="800" ry="100" fill="#66BB6A"/>
+        <rect x="0" y="620" width="1600" height="380" fill="#4CAF50"/>
+        <rect x="0" y="680" width="1600" height="320" fill="#43A047"/>
+        <rect x="0" y="750" width="1600" height="250" fill="#388E3C"/>
+        <!-- Hatch glow -->
+        <rect width="1600" height="1000" fill="url(#s5-glow)"/>
+        <!-- Wildflowers (swaying) -->
+        <g opacity="0.7">
+          <circle cx="400" cy="640" r="5" fill="#F06292" class="svg-sway-flower" style="animation-delay:-0.5s"/>
+          <circle cx="550" cy="635" r="4" fill="#BA68C8" class="svg-sway-flower" style="animation-delay:-1.2s"/>
+          <circle cx="1100" cy="638" r="5" fill="#FFEE58" class="svg-sway-flower" style="animation-delay:-2s"/>
+          <circle cx="1250" cy="642" r="4" fill="#EF5350" class="svg-sway-flower" style="animation-delay:-0.8s"/>
+        </g>
+        <!-- Sunset color overlay shift -->
+        <rect width="1600" height="400" y="0" fill="#FF8A65" opacity="0.08" style="animation: sunset-shift 8s ease-in-out infinite"/>
+        <!-- Hatch ground glow pulse -->
+        <ellipse cx="800" cy="640" rx="120" ry="40" fill="#FFD700" opacity="0.08">
+          <animate attributeName="opacity" values="0.05;0.15;0.05" dur="3s" repeatCount="indefinite"/>
+          <animate attributeName="rx" values="120;140;120" dur="3s" repeatCount="indefinite"/>
+        </ellipse>
+      </svg>
+      <!-- Warm light particles rising -->
+      <div class="ambient-particle warm-particle" style="top:55%;left:40%;animation-delay:0s;animation-duration:5s"></div>
+      <div class="ambient-particle warm-particle" style="top:58%;left:50%;animation-delay:-1.5s;animation-duration:6s"></div>
+      <div class="ambient-particle warm-particle" style="top:52%;left:60%;animation-delay:-3s;animation-duration:7s"></div>
+      <div class="ambient-particle warm-particle" style="top:56%;left:35%;animation-delay:-2s;animation-duration:5.5s"></div>
+      <div class="ambient-particle warm-particle" style="top:60%;left:55%;animation-delay:-4s;animation-duration:6.5s"></div>
+      <div class="ambient-particle warm-particle" style="top:54%;left:45%;animation-delay:-0.5s;animation-duration:8s"></div>
+    </div>
+
+    <div class="scene-content" style="justify-content:flex-start;padding-top:80px;">
+      <!-- Finale hatch -->
+      <div class="finale-hatch" id="finale-hatch">
+        <div class="lock-icon" id="lock-icon">🔒</div>
+        <svg width="160" height="100" viewBox="0 0 160 100">
+          <ellipse cx="80" cy="80" rx="70" ry="18" fill="#5D4037"/>
+          <ellipse cx="80" cy="76" rx="65" ry="15" fill="#795548"/>
+          <ellipse cx="80" cy="60" rx="55" ry="14" fill="#FFD700" stroke="#FFA000" stroke-width="3" opacity="0.6">
+            <animate attributeName="opacity" values="0.4;0.8;0.4" dur="2.5s" repeatCount="indefinite"/>
+          </ellipse>
+          <ellipse cx="80" cy="58" rx="45" ry="10" fill="#FFCA28" opacity="0.3">
+            <animate attributeName="opacity" values="0.2;0.5;0.2" dur="2.5s" repeatCount="indefinite"/>
+          </ellipse>
+          <circle cx="80" cy="58" r="8" fill="#FFA000" stroke="#FF8F00" stroke-width="2" opacity="0.5">
+            <animate attributeName="opacity" values="0.3;0.7;0.3" dur="2s" repeatCount="indefinite"/>
+          </circle>
+        </svg>
+      </div>
+
+      <div class="challenge-panel" id="finale-panel" style="display:none">
+        <div class="challenge-question" id="finale-question"></div>
+        <div id="finale-content"></div>
+        <div class="feedback-text" id="finale-feedback"></div>
+      </div>
+    </div>
+
+    <div class="narrative-box">
+      <div class="narrative-text" id="narrative-5"></div>
+      <div class="tap-hint" id="tap-hint-5">tap to continue</div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════
+       END SCREEN
+       ═════════════════════════════════════ -->
+  <div class="end-screen" id="end-screen">
+    <div class="end-title">🎉 Adventure Complete! 🎉</div>
+    <div class="end-subtitle">Episode 1: The Whispering Woods</div>
+    <div class="stars-display" id="stars-display">
+      <div class="star">⭐</div>
+      <div class="star">⭐</div>
+      <div class="star">⭐</div>
+    </div>
+    <div class="end-stats" id="end-stats">
+      <div class="stat-line"><span class="stat-icon">🧩</span> <span id="stat-challenges">You solved 0 challenges!</span></div>
+      <div class="stat-line"><span class="stat-icon">🔮</span> <span id="stat-crystal">Quest Crystal: None</span></div>
+      <div class="stat-line"><span class="stat-icon">🗺️</span> <span id="stat-path">Path chosen: None</span></div>
+    </div>
+    <div class="cliffhanger-box">
+      <div class="cliffhanger-text">"The hatch opens! But wait — Pip sees something through the hatch... a desert of golden sand stretching to the horizon. What adventures wait in the Sunstone Desert?"</div>
+    </div>
+    <button class="replay-btn" onclick="replayGame()">🔄 Play Again</button>
+  </div>
+
+  <!-- Pip hint bubble -->
+  <div class="pip-hint" id="pip-hint"></div>
+
+  <!-- Confetti container -->
+  <div class="confetti-container" id="confetti-container"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// STORY QUEST — Episode 1: The Whispering Woods
+// Complete Game JavaScript
+// ═══════════════════════════════════════════
+
+// ── GAME STATE ──
+const G = {
+  currentScene: 0,
+  difficulty: 1,         // 0=K, 1=1st, 2=2nd
+  streak: 0,
+  stars: 0,
+  questCrystal: null,
+  chosenPath: null,
+  meadowVisited: false,
+  wonderItems: [],
+  totalCorrect: 0,
+  totalAttempts: 0,
+  hatchOpened: false,
+  narrativeIndex: 0,
+  narrativeComplete: false,
+  typingTimer: null,
+  currentWords: [],
+  wordIndex: 0,
+  challengeAttempts: 0,
+  mathChallengesDone: 0,
+  phonicsChallengesDone: 0,
+  mathTarget: 3,
+  phonicsTarget: 3,
+  finaleComplete: false,
+  transitioning: false,
+};
+
+// ── AUDIO ENGINE (Web Audio API) ──
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playTone(freq, dur, type = 'sine', vol = 0.15) {
+  ensureAudio();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  g.gain.value = vol;
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + dur);
+}
+
+function playCorrect() {
+  playTone(523, 0.12); setTimeout(() => playTone(659, 0.12), 100);
+  setTimeout(() => playTone(784, 0.25), 200);
+}
+function playWrong() { playTone(220, 0.3, 'triangle', 0.1); }
+function playChime(freq = 800) { playTone(freq, 0.5, 'sine', 0.1); }
+function playCelebration() {
+  [523,659,784,1047].forEach((f,i) => setTimeout(() => playTone(f, 0.2, 'sine', 0.12), i * 120));
+}
+function playClick() { playTone(600, 0.06, 'sine', 0.08); }
+
+// ── NARRATIVES ──
+const NARRATIVES = {
+  1: [
+    "Deep in a meadow where wildflowers hum, a golden hatch begins to glow...",
+    "Tap the hatch to see what's inside! ✨",
+  ],
+  '1b': [
+    "The hatch creaks open! Golden light spills out...",
+    "Finn climbs out first, adjusting his green hat.",
+    '"Where are we?" Wren asks, opening her book.',
+    '"Ooh! Big sky! Pip likes big sky!" croaks the little frog.',
+    'Pip hears something in the woods. Should we follow the sound?',
+  ],
+  '2a': [
+    "The path leads to a river with a broken bridge!",
+    "A friendly Bridge Keeper waves from the other side.",
+    '"Help me count the planks to fix the bridge!" he calls.',
+  ],
+  '2b': [
+    "The meadow is full of hidden treasures!",
+    "Tap on things you see to discover them. Find 3 wonder items!",
+  ],
+  '2b-done': [
+    '"I hear water!" Pip croaks excitedly. "Let\'s go see!"',
+  ],
+  3: [
+    "You enter a deep, enchanted forest...",
+    "Words hang from the trees like glowing fruit!",
+    "A wise Owl hoots from above.",
+    '"Only those who can read the forest signs may pass!" the Owl declares.',
+  ],
+  4: [
+    "The cave sparkles with crystals of every color...",
+    "Each crystal chimes a different note! Pick your favorite!",
+  ],
+  '4b': [
+    "Your quest crystal glows in your hand! ✨",
+    "Three mysterious doors appear. Each leads to a different path...",
+  ],
+  5: [
+    "A clearing opens up with another golden hatch!",
+    "But wait — it's locked! 🔒",
+    "Solve the final challenge to open it!",
+  ],
+  '5-done': [
+    "The hatch glows brilliantly and swings open! ✨🎉",
+    "Pip peers through... \"I see... SAND! Golden sand everywhere!\"",
+    '"The Sunstone Desert..." Wren reads from her book.',
+    '"What adventures wait beyond? To be continued..."',
+  ],
+};
+
+// ── TYPEWRITER SYSTEM ──
+function showNarrative(sceneKey, callback) {
+  const seqs = NARRATIVES[sceneKey];
+  if (!seqs) { if (callback) callback(); return; }
+  G.narrativeIndex = 0;
+  G.narrativeComplete = false;
+  _playNarrativeStep(sceneKey, seqs, callback);
+}
+
+function _playNarrativeStep(sceneKey, seqs, callback) {
+  if (G.narrativeIndex >= seqs.length) {
+    G.narrativeComplete = true;
+    if (callback) callback();
+    return;
+  }
+  const text = seqs[G.narrativeIndex];
+  const elId = _narrativeElId(sceneKey);
+  const hintId = _hintElId(sceneKey);
+  typeWriter(elId, text, () => {
+    const hint = document.getElementById(hintId);
+    if (hint) hint.style.display = 'block';
+    _waitForTap(elId, () => {
+      const hint2 = document.getElementById(hintId);
+      if (hint2) hint2.style.display = 'none';
+      G.narrativeIndex++;
+      _playNarrativeStep(sceneKey, seqs, callback);
+    });
+  });
+}
+
+function _narrativeElId(sceneKey) {
+  const map = { 1: 'narrative-1', '1b': 'narrative-1', '2a': 'narrative-2a', '2b': 'narrative-2b',
+    '2b-done': 'narrative-2b', 3: 'narrative-3', 4: 'narrative-4', '4b': 'narrative-4',
+    5: 'narrative-5', '5-done': 'narrative-5' };
+  return map[sceneKey] || 'narrative-1';
+}
+
+function _hintElId(sceneKey) {
+  const map = { 1: 'tap-hint-1', '1b': 'tap-hint-1', '2a': 'tap-hint-2a', '2b': 'tap-hint-2b',
+    '2b-done': 'tap-hint-2b', 3: 'tap-hint-3', 4: 'tap-hint-4', '4b': 'tap-hint-4',
+    5: 'tap-hint-5', '5-done': 'tap-hint-5' };
+  return map[sceneKey] || 'tap-hint-1';
+}
+
+function typeWriter(elId, text, onDone) {
+  clearTimeout(G.typingTimer);
+  const el = document.getElementById(elId);
+  if (!el) { if (onDone) onDone(); return; }
+  const words = text.split(' ');
+  el.innerHTML = words.map(w => `<span class="word">${w}</span>`).join('');
+  G.currentWords = el.querySelectorAll('.word');
+  G.wordIndex = 0;
+  G.narrativeComplete = false;
+
+  // Allow tap to instantly reveal all words
+  el._skipHandler = () => {
+    if (G.wordIndex < G.currentWords.length) {
+      clearTimeout(G.typingTimer);
+      G.currentWords.forEach(w => w.classList.add('visible'));
+      G.wordIndex = G.currentWords.length;
+      G.narrativeComplete = true;
+      el.removeEventListener('click', el._skipHandler);
+      if (onDone) onDone();
+    }
+  };
+  el.addEventListener('click', el._skipHandler);
+
+  function revealNext() {
+    if (G.wordIndex < G.currentWords.length) {
+      G.currentWords[G.wordIndex].classList.add('visible');
+      G.wordIndex++;
+      G.typingTimer = setTimeout(revealNext, 80);
+    } else {
+      G.narrativeComplete = true;
+      el.removeEventListener('click', el._skipHandler);
+      if (onDone) onDone();
+    }
+  }
+  revealNext();
+}
+
+function _waitForTap(elId, callback) {
+  const narrativeBox = document.getElementById(elId)?.closest('.narrative-box');
+  if (!narrativeBox) { callback(); return; }
+  function handler() {
+    narrativeBox.removeEventListener('click', handler);
+    playClick();
+    callback();
+  }
+  narrativeBox.addEventListener('click', handler);
+}
+
+// ── SCENE MANAGEMENT ──
+function showScene(sceneId) {
+  if (G.transitioning) return;
+  G.transitioning = true;
+  
+  // Parallax exit: shift current scene background slightly before fade
+  const currentActive = document.querySelector('.scene.active');
+  if (currentActive) {
+    const bg = currentActive.querySelector('.scene-bg');
+    if (bg) {
+      bg.style.transition = 'transform 0.4s ease-out, opacity 0.4s ease-out';
+      bg.style.transform = 'scale(1.03) translateY(-8px)';
+      bg.style.opacity = '0.5';
+    }
+  }
+  
+  document.querySelectorAll('.scene, .end-screen').forEach(s => s.classList.remove('active'));
+  setTimeout(() => {
+    // Reset previous bg
+    document.querySelectorAll('.scene-bg').forEach(bg => {
+      bg.style.transition = '';
+      bg.style.transform = '';
+      bg.style.opacity = '';
+    });
+    
+    const el = document.getElementById(sceneId);
+    if (el) {
+      // Parallax enter: start background slightly zoomed/offset, settle in
+      const newBg = el.querySelector('.scene-bg');
+      if (newBg) {
+        newBg.style.transition = 'none';
+        newBg.style.transform = 'scale(1.04) translateY(10px)';
+        newBg.style.opacity = '0.7';
+        requestAnimationFrame(() => {
+          newBg.style.transition = 'transform 0.6s ease-out, opacity 0.6s ease-out';
+          newBg.style.transform = 'scale(1) translateY(0)';
+          newBg.style.opacity = '1';
+        });
+      }
+      el.classList.add('active');
+    }
+    updateProgressDots(sceneId);
+    G.transitioning = false;
+  }, 200);
+}
+
+function updateProgressDots(sceneId) {
+  const sceneMap = { 'scene-1': 1, 'scene-2a': 2, 'scene-2b': 2, 'scene-3': 3, 'scene-4': 4, 'scene-5': 5 };
+  const current = sceneMap[sceneId] || 0;
+  document.querySelectorAll('.progress-dot').forEach(dot => {
+    const s = parseInt(dot.dataset.scene);
+    dot.classList.remove('active', 'completed');
+    if (s < current) dot.classList.add('completed');
+    else if (s === current) dot.classList.add('active');
+  });
+}
+
+// ── START GAME ──
+function startGame() {
+  ensureAudio();
+  playClick();
+  const title = document.getElementById('title-screen');
+  title.classList.add('hidden');
+  setTimeout(() => {
+    showScene('scene-1');
+    G.currentScene = 1;
+    showNarrative(1, () => {
+      // Hatch is tappable — waiting for openHatch()
+    });
+  }, 600);
+}
+
+// ── SCENE 1: HATCH ──
+function openHatch() {
+  if (G.hatchOpened) return;
+  G.hatchOpened = true;
+  ensureAudio();
+  playCelebration();
+
+  // Animate hatch
+  const lid = document.getElementById('hatch-lid');
+  const rays = document.getElementById('hatch-rays');
+  const ring = document.getElementById('hatch-tap-ring');
+  if (lid) lid.style.transform = 'rotateX(-80deg) translateY(-20px)';
+  if (rays) { rays.style.transition = 'opacity 0.8s'; rays.style.opacity = '1'; }
+  if (ring) ring.style.display = 'none';
+
+  sparkleAt(document.getElementById('hatch'));
+
+  // Show characters after delay
+  setTimeout(() => {
+    const chars = document.getElementById('scene1-characters');
+    if (chars) chars.classList.add('visible');
+  }, 800);
+
+  // Continue narrative
+  setTimeout(() => {
+    showNarrative('1b', () => {
+      const choices = document.getElementById('scene1-choices');
+      if (choices) choices.style.display = 'flex';
+    });
+  }, 1200);
+}
+
+function goToScene(target) {
+  playClick();
+  const choices = document.getElementById('scene1-choices');
+  if (choices) choices.style.display = 'none';
+
+  if (target === '2a') {
+    showScene('scene-2a');
+    G.currentScene = 2;
+    showNarrative('2a', () => {
+      startMathChallenge();
+    });
+  } else if (target === '2b') {
+    G.meadowVisited = true;
+    showScene('scene-2b');
+    G.currentScene = 2;
+    showNarrative('2b', () => {
+      // Discoverables are already tappable via onclick
+    });
+  }
+}
+
+// ── SCENE 2B: MEADOW DISCOVERY ──
+function collectItem(item) {
+  if (G.wonderItems.includes(item)) return;
+  ensureAudio();
+  playChime(600 + G.wonderItems.length * 200);
+  G.wonderItems.push(item);
+
+  // Hide discovered element
+  const el = document.getElementById('discover-' + item);
+  if (el) el.classList.add('found');
+
+  // Update wonder bar
+  const idx = G.wonderItems.length - 1;
+  const slot = document.getElementById('wonder-' + idx);
+  if (slot) {
+    const icons = { feather: '🪶', stone: '💎', flower: '🌸' };
+    slot.textContent = icons[item] || '✨';
+    slot.classList.add('collected');
+  }
+
+  // Pip comment
+  const comments = {
+    feather: '"Ooh, a feather! So soft!" — Pip',
+    stone: '"Shiny stone! Pip likes shiny!" — Pip',
+    flower: '"Pretty flower! Smells like sunshine!" — Pip',
+  };
+  showPipHint(comments[item] || 'Nice find!');
+
+  if (G.wonderItems.length >= 3) {
+    setTimeout(() => {
+      hidePipHint();
+      showNarrative('2b-done', () => {
+        setTimeout(() => {
+          showScene('scene-2a');
+          showNarrative('2a', () => {
+            startMathChallenge();
+          });
+        }, 600);
+      });
+    }, 1500);
+  }
+}
+
+// ── SCENE 2A: MATH CHALLENGES ──
+function generateMathChallenge() {
+  const d = G.difficulty;
+  let question, answer, options, visual = '';
+  if (d === 0) {
+    // K: count objects
+    const count = Math.floor(Math.random() * 7) + 2; // 2-8
+    const emojis = ['🪵','🌟','🍎','🐟','🌺'];
+    const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+    question = 'How many do you see?';
+    visual = Array(count).fill(`<div class="plank-icon" style="font-size:24px;display:flex;align-items:center;justify-content:center">${emoji}</div>`).join('');
+    answer = count;
+    options = _makeOptions(answer, 1, 10);
+  } else if (d === 1) {
+    // 1st: addition/subtraction within 10
+    if (Math.random() < 0.5) {
+      const a = Math.floor(Math.random() * 6) + 1;
+      const b = Math.floor(Math.random() * (10 - a)) + 1;
+      question = `${a} + ${b} = ?`;
+      answer = a + b;
+    } else {
+      const total = Math.floor(Math.random() * 8) + 3;
+      const sub = Math.floor(Math.random() * (total - 1)) + 1;
+      question = `${total} − ${sub} = ?`;
+      answer = total - sub;
+    }
+    options = _makeOptions(answer, 0, 10);
+  } else {
+    // 2nd: fair sharing / division
+    const divisors = [2, 3, 4, 5];
+    const div = divisors[Math.floor(Math.random() * divisors.length)];
+    const ans = Math.floor(Math.random() * 5) + 1;
+    const total = div * ans;
+    question = `${total} shared equally among ${div} friends. How many each?`;
+    answer = ans;
+    options = _makeOptions(answer, 1, 12);
+  }
+  return { question, answer, options, visual };
+}
+
+function _makeOptions(correct, min, max) {
+  const opts = new Set([correct]);
+  while (opts.size < 4) {
+    let n = Math.floor(Math.random() * (max - min + 1)) + min;
+    if (n !== correct) opts.add(n);
+  }
+  return shuffle([...opts]);
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function startMathChallenge() {
+  G.challengeAttempts = 0;
+  const panel = document.getElementById('math-panel');
+  if (panel) panel.style.display = 'block';
+  nextMathQuestion();
+}
+
+function nextMathQuestion() {
+  const ch = generateMathChallenge();
+  document.getElementById('math-question').textContent = ch.question;
+  document.getElementById('math-visual').innerHTML = ch.visual;
+  document.getElementById('math-feedback').textContent = '';
+  document.getElementById('math-feedback').className = 'feedback-text';
+  const container = document.getElementById('math-answers');
+  container.innerHTML = '';
+  ch.options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'answer-btn';
+    btn.textContent = opt;
+    btn.onclick = () => checkMathAnswer(btn, opt, ch.answer);
+    container.appendChild(btn);
+  });
+  G.challengeAttempts = 0;
+  hidePipHint();
+}
+
+function checkMathAnswer(btn, chosen, correct) {
+  if (btn.classList.contains('correct') || btn.classList.contains('incorrect')) return;
+  ensureAudio();
+  G.totalAttempts++;
+
+  if (chosen === correct) {
+    btn.classList.add('correct');
+    playCorrect();
+    sparkleAt(btn);
+    document.getElementById('math-feedback').textContent = randomCheer();
+    document.getElementById('math-feedback').className = 'feedback-text success';
+    G.totalCorrect++;
+    G.mathChallengesDone++;
+    handleCorrect();
+
+    // Disable other buttons
+    document.querySelectorAll('#math-answers .answer-btn').forEach(b => b.style.pointerEvents = 'none');
+
+    if (G.mathChallengesDone >= G.mathTarget) {
+      setTimeout(() => bridgeSuccess(), 1200);
+    } else {
+      setTimeout(() => nextMathQuestion(), 1500);
+    }
+  } else {
+    btn.classList.add('incorrect');
+    playWrong();
+    G.challengeAttempts++;
+    handleWrong();
+    document.getElementById('math-feedback').textContent = 'Try again!';
+    document.getElementById('math-feedback').className = 'feedback-text hint';
+    setTimeout(() => btn.classList.remove('incorrect'), 600);
+
+    if (G.challengeAttempts >= 2) {
+      showPipHint(`🐸 Hint: The answer is ${correct}!`);
+    }
+  }
+}
+
+function bridgeSuccess() {
+  document.getElementById('math-panel').style.display = 'none';
+  playCelebration();
+  spawnConfetti();
+  showPipHint('"We did it! The bridge is fixed!" 🎉');
+  setTimeout(() => {
+    hidePipHint();
+    showScene('scene-3');
+    G.currentScene = 3;
+    showNarrative(3, () => {
+      startPhonicsChallenge();
+    });
+  }, 2500);
+}
+
+// ── SCENE 3: PHONICS / WORD FOREST ──
+function generatePhonicsChallenge() {
+  const d = G.difficulty;
+  if (d === 0) {
+    // K: match uppercase to lowercase
+    const pairs = [['A','a'],['B','b'],['C','c'],['D','d'],['E','e'],['F','f'],['G','g'],['H','h'],['M','m'],['S','s'],['T','t'],['R','r']];
+    const pick = pairs[Math.floor(Math.random() * pairs.length)];
+    const wrong = pairs.filter(p => p[0] !== pick[0]).sort(() => Math.random() - 0.5).slice(0, 3).map(p => p[1]);
+    const options = shuffle([pick[1], ...wrong]);
+    return { type: 'letter', question: `Find the lowercase for: ${pick[0]}`, target: pick[0], answer: pick[1], options };
+  } else if (d === 1) {
+    // 1st: CVC word — pick the matching picture
+    const words = [
+      { word: 'cat', emoji: '🐱', wrongs: ['🐶','☀️','🎩'] },
+      { word: 'dog', emoji: '🐶', wrongs: ['🐱','🐟','🌺'] },
+      { word: 'sun', emoji: '☀️', wrongs: ['🌙','🐱','🎩'] },
+      { word: 'hat', emoji: '🎩', wrongs: ['☀️','🐶','🐟'] },
+      { word: 'fish', emoji: '🐟', wrongs: ['🐱','🎩','☀️'] },
+      { word: 'bug', emoji: '🐛', wrongs: ['🐶','🌺','☀️'] },
+      { word: 'cup', emoji: '☕', wrongs: ['🐱','🎩','🐟'] },
+    ];
+    const w = words[Math.floor(Math.random() * words.length)];
+    return { type: 'word', question: `Which picture matches:`, word: w.word, answer: w.emoji, options: shuffle([w.emoji, ...w.wrongs]) };
+  } else {
+    // 2nd: sentence comprehension
+    const sentences = [
+      { text: 'The cat sat on the mat.', answer: '🐱', options: shuffle(['🐱','🐶','🐟','🌺']) },
+      { text: 'The sun is bright and warm.', answer: '☀️', options: shuffle(['☀️','🌙','🐱','🎩']) },
+      { text: 'The dog ran in the park.', answer: '🐶', options: shuffle(['🐶','🐱','🐟','☕']) },
+      { text: 'She wore a big red hat.', answer: '🎩', options: shuffle(['🎩','☀️','🐛','🐟']) },
+      { text: 'The fish swam in the pond.', answer: '🐟', options: shuffle(['🐟','🐱','🐶','☕']) },
+    ];
+    const s = sentences[Math.floor(Math.random() * sentences.length)];
+    return { type: 'sentence', question: 'Which picture matches this sentence?', sentence: s.text, answer: s.answer, options: s.options };
+  }
+}
+
+function startPhonicsChallenge() {
+  G.challengeAttempts = 0;
+  G.phonicsChallengesDone = 0;
+  const panel = document.getElementById('phonics-panel');
+  if (panel) panel.style.display = 'block';
+  nextPhonicsQuestion();
+}
+
+function nextPhonicsQuestion() {
+  const ch = generatePhonicsChallenge();
+  const qEl = document.getElementById('phonics-question');
+  const cEl = document.getElementById('phonics-content');
+  const fEl = document.getElementById('phonics-feedback');
+  fEl.textContent = '';
+  fEl.className = 'feedback-text';
+  G.challengeAttempts = 0;
+  hidePipHint();
+
+  if (ch.type === 'letter') {
+    qEl.textContent = ch.question;
+    cEl.innerHTML = `<div class="letter-grid">${ch.options.map(o =>
+      `<button class="letter-card" onclick="checkPhonics(this, '${o}', '${ch.answer}')">${o}</button>`
+    ).join('')}</div>`;
+  } else if (ch.type === 'word') {
+    qEl.textContent = ch.question;
+    cEl.innerHTML = `<div class="word-display">${ch.word}</div>
+      <div class="word-grid">${ch.options.map(o =>
+        `<div class="word-image-card" onclick="checkPhonics(this, '${o}', '${ch.answer}')">
+          <span style="font-size:40px">${o}</span>
+        </div>`
+      ).join('')}</div>`;
+  } else {
+    qEl.textContent = ch.question;
+    cEl.innerHTML = `<div style="font-size:20px;color:#555;margin-bottom:12px;font-style:italic">"${ch.sentence}"</div>
+      <div class="word-grid">${ch.options.map(o =>
+        `<div class="word-image-card" onclick="checkPhonics(this, '${o}', '${ch.answer}')">
+          <span style="font-size:40px">${o}</span>
+        </div>`
+      ).join('')}</div>`;
+  }
+}
+
+function checkPhonics(el, chosen, correct) {
+  if (el.classList.contains('matched') || el.classList.contains('correct')) return;
+  ensureAudio();
+  G.totalAttempts++;
+  const fEl = document.getElementById('phonics-feedback');
+
+  if (chosen === correct) {
+    el.classList.add('matched');
+    el.classList.add('correct');
+    playCorrect();
+    sparkleAt(el);
+    fEl.textContent = randomCheer();
+    fEl.className = 'feedback-text success';
+    G.totalCorrect++;
+    G.phonicsChallengesDone++;
+    handleCorrect();
+
+    // Disable others
+    el.parentElement.querySelectorAll('.letter-card, .word-image-card').forEach(b => b.style.pointerEvents = 'none');
+
+    if (G.phonicsChallengesDone >= G.phonicsTarget) {
+      setTimeout(() => forestSuccess(), 1200);
+    } else {
+      setTimeout(() => nextPhonicsQuestion(), 1500);
+    }
+  } else {
+    el.classList.add('wrong');
+    playWrong();
+    G.challengeAttempts++;
+    handleWrong();
+    fEl.textContent = 'Not quite — try again!';
+    fEl.className = 'feedback-text hint';
+    setTimeout(() => el.classList.remove('wrong'), 600);
+
+    if (G.challengeAttempts >= 2) {
+      showPipHint(`🐸 Hint: Try ${correct}!`);
+    }
+  }
+}
+
+function forestSuccess() {
+  document.getElementById('phonics-panel').style.display = 'none';
+  playCelebration();
+  spawnConfetti();
+  showPipHint('"The trees are parting! We can pass!" 🦉');
+  setTimeout(() => {
+    hidePipHint();
+    showScene('scene-4');
+    G.currentScene = 4;
+    showNarrative(4, () => {
+      // Crystal picker is already visible
+    });
+  }, 2500);
+}
+
+// ── SCENE 4: CRYSTAL CAVE ──
+function pickCrystal(color, el) {
+  ensureAudio();
+  const freqMap = { red: 523, blue: 659, purple: 784, green: 880, gold: 1047 };
+  playChime(freqMap[color] || 700);
+
+  document.querySelectorAll('.crystal-option').forEach(c => c.classList.remove('picked'));
+  el.classList.add('picked');
+  G.questCrystal = color;
+
+  // Update crystal slot in top bar
+  const slot = document.getElementById('crystal-slot');
+  const svg = document.getElementById('crystal-slot-svg');
+  if (slot) slot.classList.add('has-crystal');
+  const colorMap = { red: '#EF5350', blue: '#42A5F5', purple: '#AB47BC', green: '#66BB6A', gold: '#FFD54F' };
+  if (svg) {
+    const poly = svg.querySelector('polygon');
+    if (poly) poly.setAttribute('fill', colorMap[color] || '#fff');
+    svg.style.opacity = '1';
+    slot.style.color = colorMap[color];
+  }
+
+  sparkleAt(el);
+
+  // Show path doors after short delay
+  setTimeout(() => {
+    document.getElementById('crystal-picker-section').style.display = 'none';
+    document.getElementById('path-doors-section').style.display = 'block';
+    showNarrative('4b', () => {});
+  }, 1200);
+}
+
+function choosePath(path) {
+  ensureAudio();
+  playClick();
+  G.chosenPath = path;
+
+  // Animate chosen door
+  const doors = document.querySelectorAll('.door-frame');
+  doors.forEach(d => {
+    d.style.transition = 'all 0.5s ease';
+    d.style.opacity = '0.3';
+    d.style.transform = 'scale(0.9)';
+  });
+  event.currentTarget.style.opacity = '1';
+  event.currentTarget.style.transform = 'scale(1.1)';
+
+  playCelebration();
+
+  setTimeout(() => {
+    showScene('scene-5');
+    G.currentScene = 5;
+    showNarrative(5, () => {
+      startFinaleChallenge();
+    });
+  }, 1500);
+}
+
+// ── SCENE 5: FINALE ──
+function startFinaleChallenge() {
+  G.challengeAttempts = 0;
+  const panel = document.getElementById('finale-panel');
+  if (panel) panel.style.display = 'block';
+
+  if (G.chosenPath === 'star') {
+    buildPatternChallenge();
+  } else if (G.chosenPath === 'book') {
+    buildSequenceChallenge();
+  } else {
+    buildSortingChallenge();
+  }
+}
+
+// ⭐ BRAVE PATH: Pattern completion
+function buildPatternChallenge() {
+  const patterns = [
+    { seq: ['🔴','🔵','🔴','🔵'], answer: '🔴', options: ['🔴','🔵','🟢','🟡'] },
+    { seq: ['⭐','🌙','⭐','🌙'], answer: '⭐', options: ['⭐','🌙','☀️','🌟'] },
+    { seq: ['🟢','🟢','🔵','🟢','🟢'], answer: '🔵', options: ['🔴','🔵','🟢','🟡'] },
+    { seq: ['🔺','🔵','🔺','🔵'], answer: '🔺', options: ['🔺','🔵','⬛','🟢'] },
+    { seq: ['🌸','🌼','🌸','🌼'], answer: '🌸', options: ['🌸','🌼','🌺','🌻'] },
+  ];
+  const p = patterns[Math.floor(Math.random() * patterns.length)];
+  document.getElementById('finale-question').textContent = 'Complete the pattern!';
+  document.getElementById('finale-content').innerHTML = `
+    <div class="pattern-area">
+      ${p.seq.map(s => `<div class="pattern-item">${s}</div>`).join('')}
+      <div class="pattern-item mystery">?</div>
+    </div>
+    <div class="answer-options" style="margin-top:12px">
+      ${shuffle([...p.options]).map(o =>
+        `<button class="answer-btn" style="font-size:28px" onclick="checkFinale(this, '${o}', '${p.answer}')">${o}</button>`
+      ).join('')}
+    </div>`;
+  document.getElementById('finale-feedback').textContent = '';
+}
+
+// 📖 WISE PATH: Story sequencing
+function buildSequenceChallenge() {
+  const events = [
+    { icon: '🚪', text: 'Hatch opened' },
+    { icon: '🌉', text: 'Fixed bridge' },
+    { icon: '🌲', text: 'Word Forest' },
+    { icon: '💎', text: 'Crystal Cave' },
+  ];
+  const shuffled = shuffle([...events]);
+  document.getElementById('finale-question').textContent = 'Put the story events in order!';
+  let selectedOrder = [];
+
+  document.getElementById('finale-content').innerHTML = `
+    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px;min-height:50px;flex-wrap:wrap" id="sequence-slots">
+      <div class="pattern-item mystery" style="width:60px;height:60px;font-size:16px">1</div>
+      <div class="pattern-item mystery" style="width:60px;height:60px;font-size:16px">2</div>
+      <div class="pattern-item mystery" style="width:60px;height:60px;font-size:16px">3</div>
+      <div class="pattern-item mystery" style="width:60px;height:60px;font-size:16px">4</div>
+    </div>
+    <div class="sequence-cards" id="seq-cards">
+      ${shuffled.map((e, i) => `<div class="sequence-card" onclick="selectSequenceCard(this, ${i})" data-idx="${i}">
+        <div class="card-icon">${e.icon}</div>
+        <div>${e.text}</div>
+      </div>`).join('')}
+    </div>`;
+  document.getElementById('finale-feedback').textContent = '';
+
+  // Store for checking
+  window._seqEvents = shuffled;
+  window._seqOrder = [];
+  window._seqCorrectOrder = events.map(e => e.icon);
+}
+
+function selectSequenceCard(card, idx) {
+  if (card.classList.contains('placed')) return;
+  ensureAudio();
+  playClick();
+  card.classList.add('placed');
+  window._seqOrder.push(window._seqEvents[idx].icon);
+
+  const slots = document.querySelectorAll('#sequence-slots .pattern-item');
+  const slotIdx = window._seqOrder.length - 1;
+  if (slots[slotIdx]) {
+    slots[slotIdx].textContent = window._seqEvents[idx].icon;
+    slots[slotIdx].classList.remove('mystery');
+    slots[slotIdx].style.fontSize = '28px';
+  }
+
+  if (window._seqOrder.length === 4) {
+    const correct = window._seqOrder.every((s, i) => s === window._seqCorrectOrder[i]);
+    if (correct) {
+      finaleSuccess();
+    } else {
+      G.challengeAttempts++;
+      G.totalAttempts++;
+      handleWrong();
+      playWrong();
+      document.getElementById('finale-feedback').textContent = 'Not quite — try again!';
+      document.getElementById('finale-feedback').className = 'feedback-text hint';
+      if (G.challengeAttempts >= 2) {
+        showPipHint('🐸 Hint: What happened first in our adventure?');
+      }
+      // Reset after delay
+      setTimeout(() => {
+        document.querySelectorAll('#seq-cards .sequence-card').forEach(c => c.classList.remove('placed'));
+        document.querySelectorAll('#sequence-slots .pattern-item').forEach((s, i) => {
+          s.textContent = i + 1;
+          s.classList.add('mystery');
+          s.style.fontSize = '16px';
+        });
+        window._seqOrder = [];
+        document.getElementById('finale-feedback').textContent = '';
+      }, 1200);
+    }
+  }
+}
+
+// 🌿 NATURE PATH: Sorting
+function buildSortingChallenge() {
+  const items = shuffle([
+    { emoji: '🐱', type: 'animal' },
+    { emoji: '🌸', type: 'plant' },
+    { emoji: '🐸', type: 'animal' },
+    { emoji: '🌲', type: 'plant' },
+    { emoji: '🐦', type: 'animal' },
+    { emoji: '🌻', type: 'plant' },
+  ]);
+
+  document.getElementById('finale-question').textContent = 'Sort: Animals vs Plants!';
+  document.getElementById('finale-content').innerHTML = `
+    <div class="sort-zones">
+      <div class="sort-zone" id="zone-animal" onclick="event.stopPropagation()">
+        <div class="sort-zone-label">🐾 Animals</div>
+        <div id="zone-animal-items" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center"></div>
+      </div>
+      <div class="sort-zone" id="zone-plant" onclick="event.stopPropagation()">
+        <div class="sort-zone-label">🌱 Plants</div>
+        <div id="zone-plant-items" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:12px" id="sort-source">
+      ${items.map((it, i) => `<div class="sort-item" data-type="${it.type}" data-emoji="${it.emoji}" onclick="toggleSortItem(this)">${it.emoji}</div>`).join('')}
+    </div>`;
+  document.getElementById('finale-feedback').textContent = '';
+
+  // Track selection for 2-tap sort
+  window._sortSelection = null;
+  window._sortTotal = items.length;
+  window._sortPlaced = 0;
+}
+
+function toggleSortItem(el) {
+  if (el.classList.contains('sorted')) return;
+  ensureAudio();
+  playClick();
+
+  // Highlight item
+  document.querySelectorAll('#sort-source .sort-item').forEach(s => s.style.outline = 'none');
+  el.style.outline = '3px solid #FFD700';
+  window._sortSelection = el;
+
+  // Now make zones clickable
+  document.getElementById('zone-animal').onclick = () => placeSortItem('animal');
+  document.getElementById('zone-plant').onclick = () => placeSortItem('plant');
+}
+
+function placeSortItem(zone) {
+  const el = window._sortSelection;
+  if (!el) return;
+  ensureAudio();
+
+  const correct = el.dataset.type === zone;
+  G.totalAttempts++;
+
+  if (correct) {
+    playCorrect();
+    el.classList.add('sorted');
+    el.style.outline = 'none';
+    const container = document.getElementById(`zone-${zone}-items`);
+    const clone = document.createElement('div');
+    clone.className = 'sort-item sorted';
+    clone.textContent = el.dataset.emoji;
+    clone.style.width = '50px';
+    clone.style.height = '50px';
+    container.appendChild(clone);
+    el.style.opacity = '0.3';
+    el.style.pointerEvents = 'none';
+    G.totalCorrect++;
+    window._sortPlaced++;
+    window._sortSelection = null;
+    handleCorrect();
+
+    if (window._sortPlaced >= window._sortTotal) {
+      finaleSuccess();
+    }
+  } else {
+    playWrong();
+    G.challengeAttempts++;
+    handleWrong();
+    el.style.outline = 'none';
+    window._sortSelection = null;
+    document.getElementById('finale-feedback').textContent = 'Oops! Try the other side!';
+    document.getElementById('finale-feedback').className = 'feedback-text hint';
+    if (G.challengeAttempts >= 2) {
+      showPipHint('🐸 Is it alive? Does it grow from the ground or walk around?');
+    }
+  }
+}
+
+function checkFinale(btn, chosen, correct) {
+  if (btn.classList.contains('correct')) return;
+  ensureAudio();
+  G.totalAttempts++;
+
+  if (chosen === correct) {
+    btn.classList.add('correct');
+    playCorrect();
+    sparkleAt(btn);
+    G.totalCorrect++;
+    handleCorrect();
+    document.getElementById('finale-feedback').textContent = randomCheer();
+    document.getElementById('finale-feedback').className = 'feedback-text success';
+    document.querySelectorAll('#finale-content .answer-btn').forEach(b => b.style.pointerEvents = 'none');
+
+    // Fill in the mystery slot
+    const mystery = document.querySelector('#finale-content .pattern-item.mystery');
+    if (mystery) {
+      mystery.textContent = correct;
+      mystery.classList.remove('mystery');
+    }
+
+    setTimeout(() => finaleSuccess(), 1200);
+  } else {
+    btn.classList.add('incorrect');
+    playWrong();
+    G.challengeAttempts++;
+    handleWrong();
+    document.getElementById('finale-feedback').textContent = 'Not quite — try again!';
+    document.getElementById('finale-feedback').className = 'feedback-text hint';
+    setTimeout(() => btn.classList.remove('incorrect'), 600);
+
+    if (G.challengeAttempts >= 2) {
+      showPipHint('🐸 Look at the pattern. What repeats?');
+    }
+  }
+}
+
+function finaleSuccess() {
+  if (G.finaleComplete) return;
+  G.finaleComplete = true;
+  document.getElementById('finale-panel').style.display = 'none';
+  playCelebration();
+  spawnConfetti();
+
+  // Unlock hatch animation
+  const lock = document.getElementById('lock-icon');
+  if (lock) {
+    lock.textContent = '🔓';
+    setTimeout(() => { lock.style.transition = 'opacity 0.5s'; lock.style.opacity = '0'; }, 600);
+  }
+
+  // Hatch glow up
+  const hatch = document.getElementById('finale-hatch');
+  if (hatch) {
+    hatch.style.transition = 'filter 0.8s ease';
+    hatch.style.filter = 'brightness(1.8) drop-shadow(0 0 20px rgba(255,215,0,0.8))';
+  }
+
+  setTimeout(() => {
+    showNarrative('5-done', () => {
+      setTimeout(() => showEndScreen(), 1000);
+    });
+  }, 1500);
+}
+
+// ── END SCREEN ──
+function showEndScreen() {
+  // Calculate stars
+  const ratio = G.totalAttempts > 0 ? G.totalCorrect / G.totalAttempts : 0;
+  if (ratio >= 0.9) G.stars = 3;
+  else if (ratio >= 0.7) G.stars = 2;
+  else G.stars = 1;
+
+  // Show stars with animation
+  const starEls = document.querySelectorAll('#stars-display .star');
+  starEls.forEach((s, i) => {
+    if (i < G.stars) {
+      setTimeout(() => {
+        s.classList.add('earned');
+        playChime(523 + i * 200);
+      }, 400 * (i + 1));
+    }
+  });
+
+  // Stats
+  document.getElementById('stat-challenges').textContent = `You solved ${G.totalCorrect} challenges!`;
+  const crystalNames = { red: 'Ruby', blue: 'Sapphire', purple: 'Amethyst', green: 'Emerald', gold: 'Topaz' };
+  document.getElementById('stat-crystal').textContent = `Quest Crystal: ${crystalNames[G.questCrystal] || 'None'}`;
+  const pathNames = { star: '⭐ The Brave Path', book: '📖 The Wise Path', leaf: '🌿 The Nature Path' };
+  document.getElementById('stat-path').textContent = `Path: ${pathNames[G.chosenPath] || 'None'}`;
+
+  showScene('end-screen');
+  setTimeout(() => spawnConfetti(), 500);
+}
+
+// ── REPLAY ──
+function replayGame() {
+  ensureAudio();
+  playClick();
+
+  // Reset all state
+  G.currentScene = 0;
+  G.difficulty = 1;
+  G.streak = 0;
+  G.stars = 0;
+  G.questCrystal = null;
+  G.chosenPath = null;
+  G.meadowVisited = false;
+  G.wonderItems = [];
+  G.totalCorrect = 0;
+  G.totalAttempts = 0;
+  G.hatchOpened = false;
+  G.narrativeIndex = 0;
+  G.narrativeComplete = false;
+  G.challengeAttempts = 0;
+  G.mathChallengesDone = 0;
+  G.phonicsChallengesDone = 0;
+  G.finaleComplete = false;
+  G.transitioning = false;
+
+  // Reset DOM
+  document.querySelectorAll('.progress-dot').forEach(d => d.classList.remove('active', 'completed'));
+  document.querySelectorAll('#stars-display .star').forEach(s => s.classList.remove('earned'));
+  document.getElementById('crystal-slot').classList.remove('has-crystal');
+  const csvg = document.getElementById('crystal-slot-svg');
+  if (csvg) { const p = csvg.querySelector('polygon'); if (p) p.setAttribute('fill', 'rgba(255,255,255,0.3)'); csvg.style.opacity = '0.3'; }
+
+  // Reset Scene 1
+  const lid = document.getElementById('hatch-lid');
+  if (lid) lid.style.transform = '';
+  const rays = document.getElementById('hatch-rays');
+  if (rays) rays.style.opacity = '0';
+  const ring = document.getElementById('hatch-tap-ring');
+  if (ring) ring.style.display = '';
+  document.getElementById('scene1-characters').classList.remove('visible');
+  document.getElementById('scene1-choices').style.display = 'none';
+
+  // Reset Scene 2B
+  ['feather','stone','flower'].forEach(item => {
+    const el = document.getElementById('discover-' + item);
+    if (el) { el.classList.remove('found'); el.style.opacity = ''; el.style.pointerEvents = ''; }
+  });
+  [0,1,2].forEach(i => {
+    const slot = document.getElementById('wonder-' + i);
+    if (slot) { slot.textContent = '?'; slot.classList.remove('collected'); }
+  });
+
+  // Reset Scene 4
+  document.querySelectorAll('.crystal-option').forEach(c => c.classList.remove('picked'));
+  document.getElementById('crystal-picker-section').style.display = '';
+  document.getElementById('path-doors-section').style.display = 'none';
+  document.querySelectorAll('.door-frame').forEach(d => { d.style.opacity = ''; d.style.transform = ''; });
+
+  // Reset Scene 5
+  const lock = document.getElementById('lock-icon');
+  if (lock) { lock.textContent = '🔒'; lock.style.opacity = '1'; }
+  const fhatch = document.getElementById('finale-hatch');
+  if (fhatch) fhatch.style.filter = '';
+  document.getElementById('finale-panel').style.display = 'none';
+
+  // Clear narratives
+  ['narrative-1','narrative-2a','narrative-2b','narrative-3','narrative-4','narrative-5'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+
+  // Clear confetti
+  document.getElementById('confetti-container').innerHTML = '';
+  hidePipHint();
+
+  // Show scene 1
+  document.querySelectorAll('.scene, .end-screen').forEach(s => s.classList.remove('active'));
+  showScene('scene-1');
+  G.currentScene = 1;
+  showNarrative(1, () => {});
+}
+
+// ── ADAPTIVE DIFFICULTY ──
+function handleCorrect() {
+  G.streak++;
+  G.challengeAttempts = 0;
+  if (G.streak >= 2 && G.difficulty < 2) {
+    G.difficulty++;
+    G.streak = 0;
+  }
+}
+
+function handleWrong() {
+  G.streak = 0;
+  if (G.challengeAttempts >= 2 && G.difficulty > 0) {
+    G.difficulty--;
+    G.challengeAttempts = 0;
+  }
+}
+
+// ── PIP HINTS ──
+function showPipHint(text) {
+  const el = document.getElementById('pip-hint');
+  if (el) {
+    el.textContent = text;
+    el.classList.add('show');
+  }
+}
+
+function hidePipHint() {
+  const el = document.getElementById('pip-hint');
+  if (el) el.classList.remove('show');
+}
+
+// ── CONFETTI ──
+function spawnConfetti() {
+  const container = document.getElementById('confetti-container');
+  const colors = ['#FF9800','#E91E63','#9C27B0','#2196F3','#4CAF50','#FFD700','#00BCD4','#FF5722'];
+  for (let i = 0; i < 50; i++) {
+    const conf = document.createElement('div');
+    conf.className = 'confetti';
+    conf.style.left = Math.random() * 100 + '%';
+    conf.style.background = colors[Math.floor(Math.random() * colors.length)];
+    conf.style.width = (Math.random() * 8 + 6) + 'px';
+    conf.style.height = (Math.random() * 8 + 6) + 'px';
+    conf.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    conf.style.animationDuration = (Math.random() * 2 + 2) + 's';
+    conf.style.animationDelay = (Math.random() * 0.5) + 's';
+    container.appendChild(conf);
+  }
+  setTimeout(() => { container.innerHTML = ''; }, 4000);
+}
+
+// ── SPARKLE AT ELEMENT ──
+function sparkleAt(el) {
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const burst = document.createElement('div');
+  burst.className = 'sparkle-burst';
+  burst.style.left = cx + 'px';
+  burst.style.top = cy + 'px';
+  const colors = ['#FFD700', '#FF9800', '#E91E63', '#4CAF50', '#42A5F5'];
+  for (let i = 0; i < 10; i++) {
+    const p = document.createElement('div');
+    p.className = 'sparkle-particle';
+    const angle = (Math.PI * 2 / 10) * i;
+    const dist = 30 + Math.random() * 30;
+    p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+    p.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
+    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    burst.appendChild(p);
+  }
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 1000);
+}
+
+// ── CHEERFUL MESSAGES ──
+function randomCheer() {
+  const cheers = [
+    '🎉 Amazing!', '⭐ You got it!', '🌟 Brilliant!', '👏 Fantastic!',
+    '✨ Wonderful!', '💪 Great job!', '🎊 You\'re a star!', '🏆 Nailed it!',
+    '🔥 On fire!', '💫 Super!', '🤩 Incredible!', '🥳 Woohoo!',
+  ];
+  return cheers[Math.floor(Math.random() * cheers.length)];
+}
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded', () => {
+  // Title screen is visible by default; game waits for startGame()
+  document.querySelectorAll('.tap-hint').forEach(h => h.style.display = 'none');
+});
+</script>
+</body>
+</html>
