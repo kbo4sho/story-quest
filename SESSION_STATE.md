@@ -4,7 +4,7 @@ Brief for picking up this project cold. For full context read `WORLD_PLAN.md` th
 
 ## Where we are
 
-**Post-planning, pre-implementation.** The vision pivoted from 2D bubble-map + 2D top-down story engine to a **3D procedurally generated exploration world** where Leo asks questions at a campfire and regions spawn around him to walk through. Planning is complete. W0 (first implementation phase) has not started.
+**W0 scaffold in place.** First Three.js scene lives at `world/index.html`: flat prairie, placeholder Finn (cylinder body, sphere head, green cone hat), one tree for scale, tap-to-move with a yellow ring target marker, smooth third-person camera follow, tablet-friendly touch (no zoom, no tap highlight). Ready for iPad playtest — open `world/index.html` directly or serve the folder over http. Next: tune controls against a real 5-year-old on a tablet (joystick fallback decision), then move to W1 (terrain gen + Quaternius kit).
 
 ## What's locked
 
@@ -35,15 +35,17 @@ Brief for picking up this project cold. For full context read `WORLD_PLAN.md` th
 
 ## First concrete step (next action)
 
-**W0.** Three.js scene with:
-- Flat prairie (ground plane, simple green, maybe subtle grid)
-- Placeholder Finn (primitive shapes — cylinder body, sphere head, green hat — until Quaternius integration in W1)
-- Tap-to-move with target marker
-- Smooth third-person camera follow
-- One test prop (tree or rock) for scale reference
-- Touch events working on iPad; no zoom/tap-highlight
+**W0 scaffold — done.** `world/index.html` ships all the target behaviors:
+- Flat green prairie ground plane + subtle grid for motion feedback
+- Placeholder Finn (cylinder body, sphere head, green cone hat, facing nose, swinging legs)
+- Tap-to-move: raycast against ground, Finn walks to tap point, yellow ring target marker pulses and fades
+- Smooth third-person camera follow (lerp position + look-at)
+- One tree (cylinder trunk + cone canopy) for scale reference
+- iPad-friendly: `touch-action: none`, no tap highlight / callout, prevents double-tap zoom and pinch gestures, viewport locked
 
-Scope is intentionally tiny. Goal: prove camera + controls feel right for a 5-year-old on a tablet. Put code in a new `world/` folder so the existing `engine/` (2D Phase 0) stays intact until 3D runtime is playable.
+Loaded via `<script type="importmap">` pointing at `three@0.161.0` on unpkg — no build step, matches existing Story Quest deployment style. The 2D `engine/` folder is untouched.
+
+**Next:** iPad playtest against the target 5-year-old. Decide joystick-fallback necessity (open question #6). Then kick off W1 (procedural terrain + Quaternius kit + biome palettes).
 
 ## Open questions (flagged in WORLD_PLAN.md, decide as they become relevant)
 
@@ -61,6 +63,7 @@ Scope is intentionally tiny. Goal: prove camera + controls feel right for a 5-ye
 - `FACTORY_PLAN.md` — retained as architecture reference
 - `SPEC.md` — original Story Quest Episode 1 spec (historical reference)
 - `index.html` — current Story Quest game (2D)
+- `world/` — 3D runtime, starting with W0 (`index.html`) — Three.js scene, tap-to-move Finn on prairie
 - `engine/` — Phase 0 2D engine (`index.html`, `simulate.py`) — will be retired after 3D runtime is playable
 - `schema/` — `story.schema.json`, `story-example.json` — carries forward, base for region blueprint schema
 - `validator/` — Phase 0 validator work
