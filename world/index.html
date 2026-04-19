@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>World Quest — W0</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: #87ceeb;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: none;
+      overscroll-behavior: none;
+    }
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    #hud {
+      position: fixed;
+      top: env(safe-area-inset-top, 0);
+      left: env(safe-area-inset-left, 0);
+      right: env(safe-area-inset-right, 0);
+      padding: 12px 16px;
+      pointer-events: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #2c3e1f;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+      font-size: 14px;
+      letter-spacing: 0.02em;
+    }
+    #hud .title {
+      font-weight: 700;
+      font-size: 16px;
+    }
+    #hud .hint {
+      margin-top: 2px;
+      opacity: 0.75;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="hud">
+    <div class="title">World Quest · W0</div>
+    <div class="hint">Tap the ground to walk.</div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    const container = document.getElementById('app');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9ad9ea);
+    scene.fog = new THREE.Fog(0x9ad9ea, 60, 140);
+
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    // Lights
+    const hemi = new THREE.HemisphereLight(0xffe9b3, 0x6b8c3a, 0.7);
+    scene.add(hemi);
+
+    const sun = new THREE.DirectionalLight(0xfff1cf, 1.0);
+    sun.position.set(30, 50, 20);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.left = -40;
+    sun.shadow.camera.right = 40;
+    sun.shadow.camera.top = 40;
+    sun.shadow.camera.bottom = -40;
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 120;
+    sun.shadow.bias = -0.0005;
+    scene.add(sun);
+
+    // Ground — flat prairie
+    const groundGeo = new THREE.PlaneGeometry(300, 300, 1, 1);
+    const groundMat = new THREE.MeshLambertMaterial({ color: 0x8fbf52 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Subtle grid, so motion is visible
+    const grid = new THREE.GridHelper(200, 40, 0x7ba843, 0x7ba843);
+    grid.material.transparent = true;
+    grid.material.opacity = 0.25;
+    grid.position.y = 0.01;
+    scene.add(grid);
+
+    // Test prop — a small tree for scale
+    const tree = new THREE.Group();
+    const trunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 1.6, 8);
+    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b3f1d });
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = 0.8;
+    trunk.castShadow = true;
+    tree.add(trunk);
+
+    const canopyMat = new THREE.MeshLambertMaterial({ color: 0x3e8a3a });
+    const canopy = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2.4, 8), canopyMat);
+    canopy.position.y = 2.4;
+    canopy.castShadow = true;
+    tree.add(canopy);
+    tree.position.set(6, 0, -4);
+    scene.add(tree);
+
+    // Finn — placeholder primitives
+    const finn = new THREE.Group();
+    const bodyH = 0.9;
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.34, bodyH, 12),
+      new THREE.MeshLambertMaterial({ color: 0x3a6fb0 })
+    );
+    body.position.y = bodyH / 2 + 0.25;
+    body.castShadow = true;
+    finn.add(body);
+
+    // Legs (for a walk bob)
+    const legMat = new THREE.MeshLambertMaterial({ color: 0x2c4a2a });
+    const legGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.5, 8);
+    const legL = new THREE.Mesh(legGeo, legMat);
+    const legR = new THREE.Mesh(legGeo, legMat);
+    legL.position.set(-0.14, 0.25, 0);
+    legR.position.set(0.14, 0.25, 0);
+    legL.castShadow = true;
+    legR.castShadow = true;
+    finn.add(legL);
+    finn.add(legR);
+
+    // Head
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.26, 16, 12),
+      new THREE.MeshLambertMaterial({ color: 0xf2cfa4 })
+    );
+    head.position.y = bodyH + 0.45;
+    head.castShadow = true;
+    finn.add(head);
+
+    // Green hat
+    const hat = new THREE.Mesh(
+      new THREE.ConeGeometry(0.32, 0.45, 12),
+      new THREE.MeshLambertMaterial({ color: 0x2e8a3a })
+    );
+    hat.position.y = bodyH + 0.82;
+    hat.castShadow = true;
+    finn.add(hat);
+
+    // Simple "facing" nose so we can see which way Finn points
+    const nose = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 8, 6),
+      new THREE.MeshLambertMaterial({ color: 0xe8a97a })
+    );
+    nose.position.set(0, bodyH + 0.43, 0.24);
+    finn.add(nose);
+
+    scene.add(finn);
+
+    // Target marker — a ring that pulses at tap location
+    const marker = new THREE.Group();
+    const ringGeo = new THREE.RingGeometry(0.45, 0.6, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xffe27a,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    marker.add(ring);
+    marker.visible = false;
+    marker.position.y = 0.02;
+    scene.add(marker);
+
+    // Movement state
+    const target = new THREE.Vector3();
+    let moving = false;
+    const walkSpeed = 4.0; // units per second
+    const turnSpeed = 10.0; // radians per second
+    let facing = 0;
+    let walkPhase = 0;
+
+    // Camera rig — third-person follow
+    const cameraOffset = new THREE.Vector3(0, 6, 9);
+    const cameraTarget = new THREE.Vector3();
+    const desiredCamPos = new THREE.Vector3();
+
+    function placeCameraInstant() {
+      desiredCamPos.copy(finn.position).add(cameraOffset);
+      camera.position.copy(desiredCamPos);
+      cameraTarget.copy(finn.position);
+      cameraTarget.y += 0.8;
+      camera.lookAt(cameraTarget);
+    }
+    placeCameraInstant();
+
+    // Input — tap-to-move
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    const tapDown = { x: 0, y: 0, t: 0, active: false };
+    const TAP_MOVE_TOL = 10; // px
+    const TAP_TIME_TOL = 500; // ms
+
+    function setPointerFromEvent(ev, out) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const x = (ev.clientX - rect.left) / rect.width;
+      const y = (ev.clientY - rect.top) / rect.height;
+      out.x = x * 2 - 1;
+      out.y = -(y * 2 - 1);
+    }
+
+    function handleTap(ev) {
+      setPointerFromEvent(ev, pointer);
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObject(ground, false)[0];
+      if (!hit) return;
+      target.copy(hit.point);
+      target.y = 0;
+      // Clamp to ground bounds just in case
+      target.x = THREE.MathUtils.clamp(target.x, -140, 140);
+      target.z = THREE.MathUtils.clamp(target.z, -140, 140);
+      moving = true;
+      marker.position.set(target.x, 0.02, target.z);
+      marker.visible = true;
+      marker.userData.spawnTime = performance.now();
+    }
+
+    renderer.domElement.addEventListener('pointerdown', (ev) => {
+      tapDown.x = ev.clientX;
+      tapDown.y = ev.clientY;
+      tapDown.t = performance.now();
+      tapDown.active = true;
+    });
+
+    renderer.domElement.addEventListener('pointerup', (ev) => {
+      if (!tapDown.active) return;
+      tapDown.active = false;
+      const dx = ev.clientX - tapDown.x;
+      const dy = ev.clientY - tapDown.y;
+      const dt = performance.now() - tapDown.t;
+      if (Math.hypot(dx, dy) <= TAP_MOVE_TOL && dt <= TAP_TIME_TOL) {
+        handleTap(ev);
+      }
+    });
+
+    renderer.domElement.addEventListener('pointercancel', () => {
+      tapDown.active = false;
+    });
+
+    // Prevent iOS double-tap zoom and pinch on the canvas
+    renderer.domElement.addEventListener('gesturestart', (e) => e.preventDefault());
+    renderer.domElement.addEventListener('dblclick', (e) => e.preventDefault());
+
+    // Resize
+    function resize() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', resize);
+    resize();
+
+    // Main loop
+    const clock = new THREE.Clock();
+    const tmpDir = new THREE.Vector3();
+
+    function tick() {
+      const dt = Math.min(clock.getDelta(), 0.05);
+
+      if (moving) {
+        tmpDir.set(target.x - finn.position.x, 0, target.z - finn.position.z);
+        const dist = tmpDir.length();
+        if (dist < 0.08) {
+          moving = false;
+        } else {
+          tmpDir.normalize();
+          const step = Math.min(walkSpeed * dt, dist);
+          finn.position.x += tmpDir.x * step;
+          finn.position.z += tmpDir.z * step;
+
+          // Smooth facing
+          const wanted = Math.atan2(tmpDir.x, tmpDir.z);
+          let diff = wanted - facing;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          const turn = Math.sign(diff) * Math.min(Math.abs(diff), turnSpeed * dt);
+          facing += turn;
+          finn.rotation.y = facing;
+
+          // Walk bob on legs + slight body bounce
+          walkPhase += dt * 10;
+          const swing = Math.sin(walkPhase) * 0.35;
+          legL.rotation.x = swing;
+          legR.rotation.x = -swing;
+          body.position.y = bodyH / 2 + 0.25 + Math.abs(Math.sin(walkPhase)) * 0.04;
+        }
+      } else {
+        // Ease legs back to rest
+        legL.rotation.x *= 0.85;
+        legR.rotation.x *= 0.85;
+        body.position.y = bodyH / 2 + 0.25;
+      }
+
+      // Camera smoothing
+      desiredCamPos.copy(finn.position).add(cameraOffset);
+      camera.position.lerp(desiredCamPos, 1 - Math.pow(0.001, dt));
+      cameraTarget.lerp(
+        new THREE.Vector3(finn.position.x, finn.position.y + 0.8, finn.position.z),
+        1 - Math.pow(0.001, dt)
+      );
+      camera.lookAt(cameraTarget);
+
+      // Marker pulse + fade
+      if (marker.visible) {
+        const age = (performance.now() - (marker.userData.spawnTime || 0)) / 1000;
+        const pulse = 1 + Math.sin(age * 6) * 0.1;
+        ring.scale.set(pulse, pulse, pulse);
+        ringMat.opacity = moving ? 0.85 : Math.max(0, 0.85 - age * 0.8);
+        if (!moving && age > 1.0) marker.visible = false;
+      }
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+  </script>
+</body>
+</html>
