@@ -1,0 +1,457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://storyquest.local/schemas/story/0.1.json",
+  "title": "Story Quest — Story Spec",
+  "description": "Schema v0.1 for a Story Quest interactive story. Everything the runtime engine needs to play a complete episode. Scene-graph first; grid exploration (Room.grid) is reserved for future phases.",
+  "type": "object",
+  "required": ["schema_version", "meta", "world", "cast", "arc", "puzzles", "flags", "assets"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.1",
+      "description": "Engine declares which versions it supports; author output must match."
+    },
+
+    "meta": {
+      "type": "object",
+      "required": ["id", "title", "episode", "cast_present", "reading_level", "estimated_playtime_minutes"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$", "description": "Kebab-case story id, used as directory and bundle name." },
+        "title": { "type": "string", "minLength": 1 },
+        "episode": { "type": "integer", "minimum": 1 },
+        "subtitle": { "type": "string" },
+        "cast_present": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Character ids appearing in this story. Must include recurring cast members used.",
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "reading_level": {
+          "type": "string",
+          "enum": ["K", "1", "2", "K-1", "1-2", "K-2"],
+          "description": "Target US grade level for player-facing text."
+        },
+        "estimated_playtime_minutes": { "type": "integer", "minimum": 1, "maximum": 60 },
+        "brief": {
+          "type": "string",
+          "description": "The one-paragraph brief that generated this story. Retained for audit."
+        }
+      }
+    },
+
+    "world": {
+      "type": "object",
+      "required": ["mode", "spawn", "rooms"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["choice-graph", "explore-grid"],
+          "description": "choice-graph: discrete rooms traversed via named exits (Phase 0). explore-grid: top-down tile exploration (future)."
+        },
+        "spawn": {
+          "type": "object",
+          "required": ["room"],
+          "properties": {
+            "room": { "type": "string" },
+            "position": {
+              "type": "array",
+              "items": { "type": "integer" },
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "[x, y] in tiles. Required if world.mode == explore-grid."
+            }
+          },
+          "additionalProperties": false
+        },
+        "rooms": {
+          "type": "object",
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z0-9-]+$": { "$ref": "#/$defs/room" }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+
+    "cast": {
+      "type": "object",
+      "description": "All characters (recurring + story-specific NPCs) keyed by id.",
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z0-9-]+$": { "$ref": "#/$defs/character" }
+      },
+      "additionalProperties": false
+    },
+
+    "items": {
+      "type": "object",
+      "description": "Inventory items, optional.",
+      "patternProperties": {
+        "^[a-z0-9-]+$": { "$ref": "#/$defs/item" }
+      },
+      "additionalProperties": false
+    },
+
+    "flags": {
+      "type": "object",
+      "description": "Named story state. Flags drive arc beats, puzzle gates, and exit conditions.",
+      "patternProperties": {
+        "^[a-z0-9_]+$": { "$ref": "#/$defs/flag" }
+      },
+      "additionalProperties": false
+    },
+
+    "arc": {
+      "type": "object",
+      "required": ["beats"],
+      "additionalProperties": false,
+      "properties": {
+        "beats": {
+          "type": "array",
+          "description": "Ordered narrative checkpoints. Each fires when its condition becomes true.",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/arc_beat" }
+        }
+      }
+    },
+
+    "puzzles": {
+      "type": "object",
+      "description": "Every puzzle in the story, keyed by id.",
+      "patternProperties": {
+        "^[a-z0-9-]+$": { "$ref": "#/$defs/puzzle" }
+      },
+      "additionalProperties": false
+    },
+
+    "assets": {
+      "type": "object",
+      "required": ["library_refs", "manifest"],
+      "additionalProperties": false,
+      "properties": {
+        "library_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "description": "Shared-library sprite ids this story reuses (e.g., finn-walk, wren-idle, tile-grass)."
+        },
+        "manifest": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/asset_entry" },
+          "description": "Story-specific assets to generate. Every sprite/background/portrait referenced by a room or puzzle must appear here or in library_refs."
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "room": {
+      "type": "object",
+      "required": ["id", "name", "scene_type", "exits"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string" },
+        "scene_type": {
+          "type": "string",
+          "enum": ["narrative", "learning", "play", "choice", "finale"],
+          "description": "High-level scene category. Drives UI affordances."
+        },
+        "narration": { "type": "string", "description": "Narrator text shown on entry." },
+        "background": { "type": "string", "description": "Asset id for background art." },
+        "characters_present": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "description": "Character ids visible on entry."
+        },
+        "puzzles_in_room": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true,
+          "description": "Puzzle ids that must be solved before certain exits are available."
+        },
+        "on_enter": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" },
+          "description": "Effects fired when the player enters this room for the first time."
+        },
+        "on_enter_again": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" },
+          "description": "Effects fired on subsequent entries."
+        },
+        "exits": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/exit" },
+          "minItems": 0,
+          "description": "Ways to leave this room. May be empty for a finale room."
+        },
+        "grid": {
+          "type": "object",
+          "description": "Reserved for explore-grid mode; ignored in choice-graph.",
+          "properties": {
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 },
+            "tiles": { "type": "array", "items": { "type": "array", "items": { "type": "string" } } },
+            "walkable": { "type": "array", "items": { "type": "array", "items": { "type": "boolean" } } }
+          }
+        }
+      }
+    },
+
+    "exit": {
+      "type": "object",
+      "required": ["label", "target_room"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "description": "Button text in choice-graph mode." },
+        "target_room": { "type": "string" },
+        "condition": { "$ref": "#/$defs/flag_condition" },
+        "effects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" },
+          "description": "Effects fired on traversal."
+        },
+        "hidden_until": {
+          "$ref": "#/$defs/flag_condition",
+          "description": "If set, exit is not shown to player until condition holds."
+        }
+      }
+    },
+
+    "character": {
+      "type": "object",
+      "required": ["id", "name", "role", "sprite_ref"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string" },
+        "role": {
+          "type": "string",
+          "enum": ["protagonist", "companion", "npc", "antagonist"]
+        },
+        "sprite_ref": { "type": "string" },
+        "portrait_ref": { "type": "string" },
+        "voice": { "type": "string", "description": "Tone/voice note for the author (e.g., 'curious, warm')." },
+        "dialogue": {
+          "type": "object",
+          "description": "Named dialogue blocks the engine can trigger by key.",
+          "patternProperties": {
+            "^[a-z0-9_]+$": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            }
+          }
+        }
+      }
+    },
+
+    "item": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string" },
+        "sprite_ref": { "type": "string" },
+        "description": { "type": "string" },
+        "kind": { "type": "string", "enum": ["quest", "collectible", "crystal", "consumable"] }
+      }
+    },
+
+    "flag": {
+      "type": "object",
+      "required": ["type", "default"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["boolean", "number", "string"] },
+        "default": { "type": ["boolean", "number", "string"] },
+        "description": { "type": "string" }
+      }
+    },
+
+    "flag_condition": {
+      "type": "object",
+      "description": "A simple expression over flags. One form at a time.",
+      "oneOf": [
+        {
+          "required": ["flag", "equals"],
+          "properties": {
+            "flag": { "type": "string" },
+            "equals": { "type": ["boolean", "number", "string"] }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["flag", "gte"],
+          "properties": {
+            "flag": { "type": "string" },
+            "gte": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["all"],
+          "properties": {
+            "all": { "type": "array", "items": { "$ref": "#/$defs/flag_condition" }, "minItems": 1 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["any"],
+          "properties": {
+            "any": { "type": "array", "items": { "$ref": "#/$defs/flag_condition" }, "minItems": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "effect": {
+      "type": "object",
+      "description": "A single state mutation. Exactly one action per effect.",
+      "oneOf": [
+        {
+          "required": ["set_flag", "value"],
+          "properties": {
+            "set_flag": { "type": "string" },
+            "value": { "type": ["boolean", "number", "string"] }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["increment_flag", "by"],
+          "properties": {
+            "increment_flag": { "type": "string" },
+            "by": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["pickup_item"],
+          "properties": { "pickup_item": { "type": "string" } },
+          "additionalProperties": false
+        },
+        {
+          "required": ["reveal_character"],
+          "properties": { "reveal_character": { "type": "string" } },
+          "additionalProperties": false
+        },
+        {
+          "required": ["play_animation"],
+          "properties": { "play_animation": { "type": "string" } },
+          "additionalProperties": false
+        },
+        {
+          "required": ["show_narration"],
+          "properties": { "show_narration": { "type": "string" } },
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "arc_beat": {
+      "type": "object",
+      "required": ["id", "act", "when", "narrator_card"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "act": { "type": "integer", "enum": [1, 2, 3] },
+        "when": { "$ref": "#/$defs/flag_condition" },
+        "narrator_card": { "type": "string", "description": "Text shown on the narrator card. Must score at the story's reading_level." },
+        "effects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" }
+        }
+      }
+    },
+
+    "puzzle": {
+      "type": "object",
+      "required": ["id", "type", "room_id", "config", "on_solved", "solved_text"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "type": {
+          "type": "string",
+          "enum": [
+            "collect-and-deliver",
+            "sequence",
+            "dialogue-gate",
+            "pattern-match",
+            "combine",
+            "navigate",
+            "count-and-solve",
+            "word-match",
+            "sort"
+          ],
+          "description": "One of a small set of engine-supported primitives. Adding a primitive is a deliberate engine change, versioned."
+        },
+        "room_id": { "type": "string" },
+        "prompt": { "type": "string", "description": "Player-facing challenge instruction." },
+        "adaptive": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, engine selects tier based on streak/attempts (see difficulty_tiers)."
+        },
+        "difficulty_tiers": {
+          "type": "object",
+          "description": "Tiered puzzle configs. Engine picks one based on adaptive rules. Keys match reading levels.",
+          "properties": {
+            "easy": { "type": "object" },
+            "medium": { "type": "object" },
+            "hard": { "type": "object" }
+          },
+          "additionalProperties": false
+        },
+        "config": {
+          "type": "object",
+          "description": "Type-specific configuration. Shape depends on puzzle.type. Engine validates at load time."
+        },
+        "hint_text": { "type": "string", "description": "Shown (usually by Pip) after 2 wrong attempts." },
+        "on_solved": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/effect" },
+          "minItems": 1,
+          "description": "Effects applied when the puzzle is solved. Must include at least one that progresses the story (e.g., set_flag)."
+        },
+        "solved_text": { "type": "string", "description": "Celebration line shown on success." }
+      }
+    },
+
+    "asset_entry": {
+      "type": "object",
+      "required": ["id", "slot", "subject"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$", "description": "Referenced from rooms, characters, items, puzzles." },
+        "slot": {
+          "type": "string",
+          "enum": ["background", "sprite", "portrait", "prop", "tile", "ui"]
+        },
+        "subject": { "type": "string", "description": "Prompt-ready description, e.g., 'friendly bridge troll, pastel'." },
+        "dimensions": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 16 },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "style_tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Optional fixed seed for reproducible generation."
+        }
+      }
+    }
+  }
+}

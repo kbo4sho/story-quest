@@ -1,0 +1,523 @@
+{
+  "schema_version": "0.1",
+
+  "meta": {
+    "id": "whispering-woods",
+    "title": "The Whispering Woods",
+    "subtitle": "Story Quest — Episode 1",
+    "episode": 1,
+    "cast_present": ["finn", "wren", "pip", "bridge-keeper", "word-owl"],
+    "reading_level": "K-2",
+    "estimated_playtime_minutes": 12,
+    "brief": "Finn, Wren, and Pip climb out of a golden hatch in a sunlit meadow. They must cross a broken bridge (counting puzzle), read the Word Owl's forest signs (phonics puzzle), choose their path in a crystal cave, and open a second hatch to discover the Sunstone Desert."
+  },
+
+  "world": {
+    "mode": "choice-graph",
+    "spawn": { "room": "meadow-hatch" },
+    "rooms": {
+      "meadow-hatch": {
+        "id": "meadow-hatch",
+        "name": "The Golden Hatch",
+        "scene_type": "narrative",
+        "narration": "Deep in a meadow where wildflowers hum, a golden hatch begins to glow.",
+        "background": "bg-meadow-hatch",
+        "characters_present": ["finn", "wren", "pip"],
+        "puzzles_in_room": [],
+        "on_enter": [
+          { "show_narration": "A golden hatch glows in the meadow. Tap it to open." }
+        ],
+        "exits": [
+          {
+            "label": "Go toward the sound",
+            "target_room": "counting-bridge",
+            "hidden_until": { "flag": "hatch_opened", "equals": true },
+            "effects": [{ "set_flag": "chose_direct_path", "value": true }]
+          },
+          {
+            "label": "Explore the meadow first",
+            "target_room": "meadow-discovery",
+            "hidden_until": { "flag": "hatch_opened", "equals": true }
+          }
+        ]
+      },
+
+      "meadow-discovery": {
+        "id": "meadow-discovery",
+        "name": "Wildflower Meadow",
+        "scene_type": "play",
+        "narration": "Butterflies dance over tall grass. Pip sees something shiny!",
+        "background": "bg-meadow-wide",
+        "characters_present": ["finn", "wren", "pip"],
+        "puzzles_in_room": ["meadow-wonder-items"],
+        "on_enter": [{ "set_flag": "meadow_visited", "value": true }],
+        "exits": [
+          {
+            "label": "I hear water! Let's go!",
+            "target_room": "counting-bridge",
+            "hidden_until": { "flag": "wonder_items_collected", "gte": 3 }
+          }
+        ]
+      },
+
+      "counting-bridge": {
+        "id": "counting-bridge",
+        "name": "The Counting Bridge",
+        "scene_type": "learning",
+        "narration": "The bridge is broken! The Bridge Keeper waves you over.",
+        "background": "bg-broken-bridge",
+        "characters_present": ["finn", "wren", "pip", "bridge-keeper"],
+        "puzzles_in_room": ["bridge-count"],
+        "exits": [
+          {
+            "label": "Cross the bridge",
+            "target_room": "word-forest",
+            "hidden_until": { "flag": "bridge_fixed", "equals": true }
+          }
+        ]
+      },
+
+      "word-forest": {
+        "id": "word-forest",
+        "name": "The Word Forest",
+        "scene_type": "learning",
+        "narration": "Letters hang from the trees like fruit. The Word Owl watches.",
+        "background": "bg-word-forest",
+        "characters_present": ["finn", "wren", "pip", "word-owl"],
+        "puzzles_in_room": ["owl-word-match"],
+        "exits": [
+          {
+            "label": "Follow the glimmer",
+            "target_room": "crystal-cave",
+            "hidden_until": { "flag": "owl_passed", "equals": true }
+          }
+        ]
+      },
+
+      "crystal-cave": {
+        "id": "crystal-cave",
+        "name": "The Crystal Cave",
+        "scene_type": "choice",
+        "narration": "The cave is full of crystals, each glowing a different color.",
+        "background": "bg-crystal-cave",
+        "characters_present": ["finn", "wren", "pip"],
+        "puzzles_in_room": [],
+        "exits": [
+          {
+            "label": "⭐ The Brave Path",
+            "target_room": "second-hatch-brave",
+            "effects": [
+              { "set_flag": "chosen_path", "value": "brave" }
+            ]
+          },
+          {
+            "label": "📖 The Wise Path",
+            "target_room": "second-hatch-wise",
+            "effects": [
+              { "set_flag": "chosen_path", "value": "wise" }
+            ]
+          },
+          {
+            "label": "🌿 The Nature Path",
+            "target_room": "second-hatch-nature",
+            "effects": [
+              { "set_flag": "chosen_path", "value": "nature" }
+            ]
+          }
+        ]
+      },
+
+      "second-hatch-brave": {
+        "id": "second-hatch-brave",
+        "name": "The Second Hatch — Brave",
+        "scene_type": "finale",
+        "narration": "A locked hatch. The lock needs the right sequence!",
+        "background": "bg-second-hatch",
+        "characters_present": ["finn", "wren", "pip"],
+        "puzzles_in_room": ["finale-pattern"],
+        "on_enter": [{ "set_flag": "finale_room_reached", "value": true }],
+        "exits": []
+      },
+
+      "second-hatch-wise": {
+        "id": "second-hatch-wise",
+        "name": "The Second Hatch — Wise",
+        "scene_type": "finale",
+        "narration": "A locked hatch. Put the story in order to open it!",
+        "background": "bg-second-hatch",
+        "characters_present": ["finn", "wren", "pip"],
+        "puzzles_in_room": ["finale-sequence"],
+        "on_enter": [{ "set_flag": "finale_room_reached", "value": true }],
+        "exits": []
+      },
+
+      "second-hatch-nature": {
+        "id": "second-hatch-nature",
+        "name": "The Second Hatch — Nature",
+        "scene_type": "finale",
+        "narration": "A locked hatch. Sort the living things from the non-living to open it!",
+        "background": "bg-second-hatch",
+        "characters_present": ["finn", "wren", "pip"],
+        "puzzles_in_room": ["finale-sort"],
+        "on_enter": [{ "set_flag": "finale_room_reached", "value": true }],
+        "exits": []
+      }
+    }
+  },
+
+  "cast": {
+    "finn": {
+      "id": "finn",
+      "name": "Finn",
+      "role": "protagonist",
+      "sprite_ref": "finn-idle",
+      "portrait_ref": "finn-portrait",
+      "voice": "brave, warm, curious",
+      "dialogue": {
+        "greet": ["Ready, friends? Let's go!"],
+        "try_again": ["That's okay. Try again!"]
+      }
+    },
+    "wren": {
+      "id": "wren",
+      "name": "Wren",
+      "role": "companion",
+      "sprite_ref": "wren-idle",
+      "portrait_ref": "wren-portrait",
+      "voice": "thoughtful, kind",
+      "dialogue": {
+        "greet": ["Where are we?"],
+        "reading": ["Let's read this together."]
+      }
+    },
+    "pip": {
+      "id": "pip",
+      "name": "Pip",
+      "role": "companion",
+      "sprite_ref": "pip-idle",
+      "portrait_ref": "pip-portrait",
+      "voice": "bouncy, silly, warm",
+      "dialogue": {
+        "hint_count": ["Pip counts with his toes! One, two, three..."],
+        "hint_word": ["Say the sounds. Slow... like... this."],
+        "hint_sort": ["Pip asks: does it breathe? Does it grow?"],
+        "shiny": ["Ooh, shiny! Pip likes shiny!"]
+      }
+    },
+    "bridge-keeper": {
+      "id": "bridge-keeper",
+      "name": "Bridge Keeper",
+      "role": "npc",
+      "sprite_ref": "bridge-keeper-idle",
+      "portrait_ref": "bridge-keeper-portrait",
+      "voice": "gentle giant, slow",
+      "dialogue": {
+        "greet": ["My bridge has lost its planks. Can you count them?"],
+        "thanks": ["Well done! Cross safely, little ones."]
+      }
+    },
+    "word-owl": {
+      "id": "word-owl",
+      "name": "The Word Owl",
+      "role": "npc",
+      "sprite_ref": "owl-idle",
+      "portrait_ref": "owl-portrait",
+      "voice": "wise, playful",
+      "dialogue": {
+        "greet": ["Only those who read the forest signs may pass."],
+        "thanks": ["Hoot! Well read, little ones."]
+      }
+    }
+  },
+
+  "items": {
+    "wonder-feather": {
+      "id": "wonder-feather",
+      "name": "Soft Feather",
+      "sprite_ref": "item-feather",
+      "description": "A feather that smells like sunshine.",
+      "kind": "collectible"
+    },
+    "wonder-stone": {
+      "id": "wonder-stone",
+      "name": "Shiny Stone",
+      "sprite_ref": "item-stone",
+      "description": "A stone that hums when you hold it.",
+      "kind": "collectible"
+    },
+    "wonder-flower": {
+      "id": "wonder-flower",
+      "name": "Humming Flower",
+      "sprite_ref": "item-flower",
+      "description": "A flower that sings a tiny tune.",
+      "kind": "collectible"
+    },
+    "quest-crystal": {
+      "id": "quest-crystal",
+      "name": "Quest Crystal",
+      "sprite_ref": "item-crystal",
+      "description": "A crystal the player chose in the Crystal Cave.",
+      "kind": "crystal"
+    }
+  },
+
+  "flags": {
+    "hatch_opened":         { "type": "boolean", "default": false, "description": "Scene 1 hatch opened." },
+    "chose_direct_path":    { "type": "boolean", "default": false },
+    "meadow_visited":       { "type": "boolean", "default": false },
+    "wonder_items_collected": { "type": "number", "default": 0, "description": "0..3 in meadow discovery." },
+    "bridge_fixed":         { "type": "boolean", "default": false },
+    "owl_passed":           { "type": "boolean", "default": false },
+    "chosen_path":          { "type": "string", "default": "", "description": "brave | wise | nature" },
+    "crystal_color":        { "type": "string", "default": "", "description": "Player's chosen crystal color." },
+    "finale_room_reached":  { "type": "boolean", "default": false },
+    "finale_solved":        { "type": "boolean", "default": false }
+  },
+
+  "arc": {
+    "beats": [
+      {
+        "id": "act1-open",
+        "act": 1,
+        "when": { "flag": "hatch_opened", "equals": true },
+        "narrator_card": "A new world opens. Finn, Wren, and Pip step into the meadow."
+      },
+      {
+        "id": "act2-river",
+        "act": 2,
+        "when": { "flag": "bridge_fixed", "equals": true },
+        "narrator_card": "The bridge is whole again. The forest calls."
+      },
+      {
+        "id": "act2-owl",
+        "act": 2,
+        "when": { "flag": "owl_passed", "equals": true },
+        "narrator_card": "The Word Owl nods. The path is yours."
+      },
+      {
+        "id": "act3-finale",
+        "act": 3,
+        "when": { "flag": "finale_solved", "equals": true },
+        "narrator_card": "The second hatch glows — what waits beyond?",
+        "effects": [{ "show_narration": "A desert of golden sand stretches to the horizon. To be continued..." }]
+      }
+    ]
+  },
+
+  "puzzles": {
+    "meadow-wonder-items": {
+      "id": "meadow-wonder-items",
+      "type": "collect-and-deliver",
+      "room_id": "meadow-discovery",
+      "prompt": "Find 3 wonder items in the meadow.",
+      "adaptive": false,
+      "config": {
+        "targets": ["wonder-feather", "wonder-stone", "wonder-flower"],
+        "deliver_to": null,
+        "require_all": true
+      },
+      "hint_text": "Pip points: 'Tap the shiny things!'",
+      "on_solved": [
+        { "set_flag": "wonder_items_collected", "value": 3 }
+      ],
+      "solved_text": "Pip bounces: 'We found them all!'"
+    },
+
+    "bridge-count": {
+      "id": "bridge-count",
+      "type": "count-and-solve",
+      "room_id": "counting-bridge",
+      "prompt": "Help the Bridge Keeper fix the bridge.",
+      "adaptive": true,
+      "difficulty_tiers": {
+        "easy":   { "question": "How many planks do you see?", "visual_count": 7, "answer": 7, "choices": [5, 6, 7, 8] },
+        "medium": { "question": "We need 10 planks. We have 6. How many more?", "visual_count": 6, "answer": 4, "choices": [3, 4, 5, 6] },
+        "hard":   { "question": "Each side needs the same number. We have 14 planks for 2 sides.", "visual_count": 14, "answer": 7, "choices": [6, 7, 8, 9] }
+      },
+      "config": {},
+      "hint_text": "Pip counts with his toes: one, two, three...",
+      "on_solved": [{ "set_flag": "bridge_fixed", "value": true }],
+      "solved_text": "The Bridge Keeper waves. 'Cross safely, little ones.'"
+    },
+
+    "owl-word-match": {
+      "id": "owl-word-match",
+      "type": "word-match",
+      "room_id": "word-forest",
+      "prompt": "Match the letters and words the Word Owl shows you.",
+      "adaptive": true,
+      "difficulty_tiers": {
+        "easy":   { "pairs": [["A", "a"], ["B", "b"], ["C", "c"]], "style": "uppercase-lowercase" },
+        "medium": { "pairs": [["cat", "🐱"], ["dog", "🐶"], ["sun", "☀️"], ["hat", "🎩"]], "style": "cvc-picture" },
+        "hard":   { "pairs": [["The cat sat on the mat.", "🐱🪑"], ["The dog ran in the sun.", "🐶☀️"]], "style": "sentence-picture" }
+      },
+      "config": {},
+      "hint_text": "Say the sounds out loud — the Owl listens.",
+      "on_solved": [{ "set_flag": "owl_passed", "value": true }],
+      "solved_text": "The Owl hoots. The trees part."
+    },
+
+    "finale-pattern": {
+      "id": "finale-pattern",
+      "type": "pattern-match",
+      "room_id": "second-hatch-brave",
+      "prompt": "The lock needs the right sequence. Finish the pattern!",
+      "adaptive": false,
+      "config": {
+        "sequence": ["red", "blue", "red", "blue", "?"],
+        "answer": "red",
+        "choices": ["red", "blue", "green", "gold"]
+      },
+      "hint_text": "Look at the colors. What comes next?",
+      "on_solved": [{ "set_flag": "finale_solved", "value": true }],
+      "solved_text": "Click! The lock opens."
+    },
+
+    "finale-sequence": {
+      "id": "finale-sequence",
+      "type": "sequence",
+      "room_id": "second-hatch-wise",
+      "prompt": "Put the story in the right order.",
+      "adaptive": false,
+      "config": {
+        "items": ["hatch-opens", "bridge-fixed", "owl-passes", "crystal-chosen"],
+        "correct_order": ["hatch-opens", "bridge-fixed", "owl-passes", "crystal-chosen"]
+      },
+      "hint_text": "What happened first? What happened next?",
+      "on_solved": [{ "set_flag": "finale_solved", "value": true }],
+      "solved_text": "The story clicks into place. The hatch glows."
+    },
+
+    "finale-sort": {
+      "id": "finale-sort",
+      "type": "sort",
+      "room_id": "second-hatch-nature",
+      "prompt": "Sort the living things from the non-living.",
+      "adaptive": false,
+      "config": {
+        "buckets": ["living", "non-living"],
+        "items": [
+          { "id": "frog", "label": "🐸 Frog", "bucket": "living" },
+          { "id": "tree", "label": "🌳 Tree", "bucket": "living" },
+          { "id": "rock", "label": "🪨 Rock", "bucket": "non-living" },
+          { "id": "cloud", "label": "☁️ Cloud", "bucket": "non-living" },
+          { "id": "flower", "label": "🌸 Flower", "bucket": "living" },
+          { "id": "feather", "label": "🪶 Feather", "bucket": "non-living" }
+        ]
+      },
+      "hint_text": "Pip asks: does it breathe? Does it grow?",
+      "on_solved": [{ "set_flag": "finale_solved", "value": true }],
+      "solved_text": "Everything finds its place. The hatch opens."
+    }
+  },
+
+  "assets": {
+    "library_refs": [
+      "finn-idle",
+      "finn-portrait",
+      "wren-idle",
+      "wren-portrait",
+      "pip-idle",
+      "pip-portrait",
+      "ui-narrator-card",
+      "ui-choice-button",
+      "ui-progress-dot",
+      "item-crystal"
+    ],
+    "manifest": [
+      {
+        "id": "bg-meadow-hatch",
+        "slot": "background",
+        "subject": "sunny wildflower meadow with a glowing golden hatch in the grass, gentle morning light",
+        "dimensions": [1200, 800],
+        "style_tags": ["storybook", "pastel", "warm"]
+      },
+      {
+        "id": "bg-meadow-wide",
+        "slot": "background",
+        "subject": "wildflower meadow with butterflies, soft hills, scattered wonder items (feather, shiny stone, humming flower)",
+        "dimensions": [1200, 800],
+        "style_tags": ["storybook", "pastel"]
+      },
+      {
+        "id": "bg-broken-bridge",
+        "slot": "background",
+        "subject": "wooden bridge with missing planks over a gentle river, friendly troll bridge-keeper on the far side",
+        "dimensions": [1200, 800],
+        "style_tags": ["storybook", "warm"]
+      },
+      {
+        "id": "bg-word-forest",
+        "slot": "background",
+        "subject": "magical forest with letters and words hanging from the branches like fruit, a wise owl perched on a high bough",
+        "dimensions": [1200, 800],
+        "style_tags": ["storybook", "magical"]
+      },
+      {
+        "id": "bg-crystal-cave",
+        "slot": "background",
+        "subject": "glittering cave interior with tall crystals in many colors and a stone door with three symbols (star, book, leaf)",
+        "dimensions": [1200, 800],
+        "style_tags": ["storybook", "magical", "cool-palette"]
+      },
+      {
+        "id": "bg-second-hatch",
+        "slot": "background",
+        "subject": "clearing with a second golden hatch, mysterious and glowing, hints of a desert horizon beyond",
+        "dimensions": [1200, 800],
+        "style_tags": ["storybook", "warm"]
+      },
+
+      {
+        "id": "bridge-keeper-idle",
+        "slot": "sprite",
+        "subject": "friendly gentle-giant bridge troll, round face, kind eyes, waving",
+        "dimensions": [256, 384],
+        "style_tags": ["storybook", "friendly"]
+      },
+      {
+        "id": "bridge-keeper-portrait",
+        "slot": "portrait",
+        "subject": "friendly bridge troll face portrait, warm smile",
+        "dimensions": [256, 256],
+        "style_tags": ["storybook"]
+      },
+      {
+        "id": "owl-idle",
+        "slot": "sprite",
+        "subject": "wise but playful owl with big round glasses, small book in a wing",
+        "dimensions": [256, 256],
+        "style_tags": ["storybook", "friendly"]
+      },
+      {
+        "id": "owl-portrait",
+        "slot": "portrait",
+        "subject": "owl face portrait with glasses, kind eyes",
+        "dimensions": [256, 256],
+        "style_tags": ["storybook"]
+      },
+
+      {
+        "id": "item-feather",
+        "slot": "prop",
+        "subject": "small soft feather, pale yellow, with a faint glow",
+        "dimensions": [128, 128],
+        "style_tags": ["storybook"]
+      },
+      {
+        "id": "item-stone",
+        "slot": "prop",
+        "subject": "shiny pebble with a rainbow sheen",
+        "dimensions": [128, 128],
+        "style_tags": ["storybook"]
+      },
+      {
+        "id": "item-flower",
+        "slot": "prop",
+        "subject": "small humming wildflower, pink and violet, tiny music notes floating up",
+        "dimensions": [128, 128],
+        "style_tags": ["storybook"]
+      }
+    ]
+  }
+}

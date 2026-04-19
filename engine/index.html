@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Story Quest Engine — Phase 0</title>
+  <style>
+    :root {
+      --bg: #E8F5E9;
+      --panel: #fffdf7;
+      --ink: #2E2E2E;
+      --accent: #FF9800;
+      --accent2: #42A5F5;
+      --ok: #66BB6A;
+      --bad: #E57373;
+      --edge: #d9d1bf;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Baloo 2", sans-serif;
+      background: linear-gradient(#87CEEB, var(--bg));
+      min-height: 100vh;
+      color: var(--ink);
+      font-size: 18px;
+    }
+    header {
+      padding: 10px 16px;
+      background: #fff;
+      border-bottom: 1px solid var(--edge);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    header h1 { font-size: 18px; margin: 0; }
+    header .meta { font-size: 13px; color: #666; }
+    header .controls button {
+      background: #eee; border: 1px solid var(--edge); border-radius: 8px;
+      padding: 6px 12px; font-size: 13px; cursor: pointer;
+    }
+    main {
+      max-width: 900px;
+      margin: 20px auto;
+      padding: 0 16px;
+    }
+    .room-card {
+      background: var(--panel);
+      border: 1px solid var(--edge);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.06);
+    }
+    .room-bg {
+      background: #ddefff;
+      border: 2px dashed #9ab;
+      border-radius: 12px;
+      padding: 12px 16px;
+      color: #456;
+      font-style: italic;
+      font-size: 14px;
+      margin-bottom: 14px;
+    }
+    .room-title { font-size: 22px; margin: 0 0 6px; }
+    .room-subtitle { color: #666; font-size: 14px; margin-bottom: 16px; }
+    .narration {
+      background: #fff8e1;
+      border-left: 4px solid var(--accent);
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin: 12px 0;
+      font-size: 18px;
+    }
+    .characters {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin: 10px 0;
+    }
+    .character {
+      background: #fff;
+      border: 1px solid var(--edge);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 14px;
+    }
+    .character.protagonist { background: #dcedc8; }
+    .character.companion   { background: #e1f5fe; }
+    .character.npc         { background: #fff3e0; }
+    .exits { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+    .exits button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,.15);
+    }
+    .exits button.secondary { background: var(--accent2); }
+    .exits button:disabled { opacity: .4; cursor: not-allowed; }
+    .puzzle {
+      background: #fff;
+      border: 2px solid var(--accent);
+      border-radius: 12px;
+      padding: 16px;
+      margin: 12px 0;
+    }
+    .puzzle h3 { margin: 0 0 8px; font-size: 17px; }
+    .puzzle .prompt { font-size: 18px; margin-bottom: 12px; }
+    .puzzle .tier { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .choice-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+    .choice-row button {
+      background: #f5f5f5;
+      border: 2px solid var(--edge);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      min-width: 70px;
+    }
+    .choice-row button.correct { background: var(--ok); color: white; border-color: var(--ok); }
+    .choice-row button.wrong   { background: var(--bad); color: white; border-color: var(--bad); animation: shake .3s; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .hint { color: #666; font-style: italic; margin-top: 8px; }
+    .inventory {
+      margin: 8px 0; font-size: 14px; color: #555;
+      display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    .item-chip {
+      background: #fff; border: 1px solid var(--edge);
+      border-radius: 999px; padding: 4px 10px;
+    }
+    .narrator-card {
+      position: fixed; top: 30%; left: 50%; transform: translateX(-50%);
+      background: #fff; border: 3px solid var(--accent);
+      border-radius: 16px; padding: 20px 28px; max-width: 480px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.2); z-index: 100;
+      font-size: 20px; text-align: center;
+    }
+    .narrator-card button {
+      margin-top: 12px; background: var(--accent);
+      color: #fff; border: none; border-radius: 10px;
+      padding: 10px 20px; font-size: 16px; cursor: pointer;
+    }
+    .debug {
+      margin-top: 30px; font-size: 12px; color: #888;
+      background: #fafafa; padding: 10px; border-radius: 8px;
+      font-family: monospace; white-space: pre-wrap;
+    }
+    .solved-badge {
+      display: inline-block;
+      background: var(--ok); color: #fff;
+      padding: 2px 10px; border-radius: 999px;
+      font-size: 12px; margin-left: 8px;
+    }
+    .end-screen { text-align: center; padding: 40px 20px; }
+    .end-screen h2 { font-size: 28px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1 id="story-title">Story Quest</h1>
+      <div class="meta" id="story-meta"></div>
+    </div>
+    <div class="controls">
+      <button onclick="StoryQuest.reset()">Reset</button>
+      <button onclick="StoryQuest.autoplay()">Auto-play (test)</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <div class="room-card">Loading story…</div>
+  </main>
+
+  <script>
+  // ───────────────────────────────────────────────
+  // Story Quest — Phase 0 Engine
+  // Schema-driven runtime. No story logic hard-coded.
+  // ───────────────────────────────────────────────
+  const STORY_URL = '../schema/story-example.json';
+  const STORAGE_KEY = 'story-quest-save';
+
+  const StoryQuest = (() => {
+    let story = null;
+    let state = null;
+    let puzzleState = {}; // per-puzzle attempts/streak/tier
+
+    // ── flag conditions ──────────────────────────
+    function evalCondition(cond) {
+      if (!cond) return true;
+      if ('flag' in cond) {
+        const v = state.flags[cond.flag];
+        if ('equals' in cond) return v === cond.equals;
+        if ('gte' in cond)    return typeof v === 'number' && v >= cond.gte;
+      }
+      if ('all' in cond) return cond.all.every(evalCondition);
+      if ('any' in cond) return cond.any.some(evalCondition);
+      return false;
+    }
+
+    // ── effects ──────────────────────────────────
+    function applyEffect(e) {
+      if ('set_flag' in e)         state.flags[e.set_flag] = e.value;
+      if ('increment_flag' in e)   state.flags[e.increment_flag] = (state.flags[e.increment_flag] || 0) + e.by;
+      if ('pickup_item' in e)      { if (!state.inventory.includes(e.pickup_item)) state.inventory.push(e.pickup_item); }
+      if ('reveal_character' in e) state.revealed.add(e.reveal_character);
+      if ('show_narration' in e)   queueNarration(e.show_narration);
+      if ('play_animation' in e)   {/* engine-side decoration; ignored in Phase 0 */}
+    }
+    function applyEffects(effects) { (effects || []).forEach(applyEffect); }
+
+    // ── narrator card queue ──────────────────────
+    let narrationQueue = [];
+    function queueNarration(text) { narrationQueue.push(text); }
+    function drainNarration() {
+      if (!narrationQueue.length) return;
+      const text = narrationQueue.shift();
+      const card = document.createElement('div');
+      card.className = 'narrator-card';
+      card.innerHTML = `<div>${text}</div><button>Continue</button>`;
+      document.body.appendChild(card);
+      card.querySelector('button').onclick = () => {
+        card.remove();
+        drainNarration();
+        render();
+      };
+    }
+
+    // ── arc beats ────────────────────────────────
+    function checkArcBeats() {
+      for (const beat of story.arc.beats) {
+        if (state.beatsFired.has(beat.id)) continue;
+        if (evalCondition(beat.when)) {
+          state.beatsFired.add(beat.id);
+          queueNarration(`(Act ${beat.act}) ${beat.narrator_card}`);
+          applyEffects(beat.effects);
+        }
+      }
+    }
+
+    // ── transitions ──────────────────────────────
+    function enterRoom(roomId) {
+      const room = story.world.rooms[roomId];
+      const first = !state.visited.has(roomId);
+      state.currentRoom = roomId;
+      state.visited.add(roomId);
+      applyEffects(first ? room.on_enter : room.on_enter_again);
+      checkArcBeats();
+      save();
+    }
+
+    function traverseExit(exit) {
+      applyEffects(exit.effects);
+      enterRoom(exit.target_room);
+      checkArcBeats();
+      render();
+      drainNarration();
+    }
+
+    // ── room rendering ───────────────────────────
+    function render() {
+      const room = story.world.rooms[state.currentRoom];
+      const app = document.getElementById('app');
+
+      // Finale and all puzzles solved → end screen
+      if (room.scene_type === 'finale' && state.flags.finale_solved) {
+        app.innerHTML = `
+          <div class="room-card end-screen">
+            <h2>🎉 You opened the hatch!</h2>
+            <p>${escapeHtml(room.narration || '')}</p>
+            <p><em>To be continued in Episode ${story.meta.episode + 1}…</em></p>
+            <p style="margin-top:20px;font-size:14px;color:#666;">
+              Flags at end: ${formatFlags()}
+            </p>
+          </div>`;
+        return;
+      }
+
+      let html = `<div class="room-card">`;
+      html += `<div class="room-bg">[background: ${room.background || '—'}]</div>`;
+      html += `<h2 class="room-title">${escapeHtml(room.name)}</h2>`;
+      html += `<div class="room-subtitle">${escapeHtml(room.scene_type)} · room id: ${room.id}</div>`;
+      if (room.narration) html += `<div class="narration">${escapeHtml(room.narration)}</div>`;
+      if (room.characters_present?.length) {
+        html += `<div class="characters">`;
+        for (const cid of room.characters_present) {
+          const c = story.cast[cid];
+          if (!c) continue;
+          html += `<div class="character ${c.role}">${escapeHtml(c.name)}</div>`;
+        }
+        html += `</div>`;
+      }
+      html += renderInventory();
+      html += `<div id="puzzle-area"></div>`;
+      html += `<div class="exits" id="exits"></div>`;
+      html += renderDebug();
+      html += `</div>`;
+      app.innerHTML = html;
+
+      // Puzzles (render only unsolved ones)
+      const puzzleArea = document.getElementById('puzzle-area');
+      for (const pid of room.puzzles_in_room || []) {
+        const p = story.puzzles[pid];
+        if (!p) continue;
+        puzzleArea.appendChild(renderPuzzle(p));
+      }
+
+      // Exits
+      const exitsBox = document.getElementById('exits');
+      for (const ex of room.exits || []) {
+        if (ex.hidden_until && !evalCondition(ex.hidden_until)) continue;
+        const btn = document.createElement('button');
+        btn.textContent = ex.label;
+        if (ex.condition && !evalCondition(ex.condition)) btn.disabled = true;
+        btn.onclick = () => traverseExit(ex);
+        exitsBox.appendChild(btn);
+      }
+
+      // Scene 1 special: hatch-open affordance on the starting narrative room
+      if (room.id === 'meadow-hatch' && !state.flags.hatch_opened) {
+        const btn = document.createElement('button');
+        btn.textContent = '✨ Tap the hatch';
+        btn.className = 'secondary';
+        btn.onclick = () => {
+          state.flags.hatch_opened = true;
+          checkArcBeats();
+          save();
+          render();
+          drainNarration();
+        };
+        exitsBox.appendChild(btn);
+      }
+    }
+
+    function renderInventory() {
+      if (!state.inventory.length) return '';
+      let html = `<div class="inventory">Inventory:`;
+      for (const iid of state.inventory) {
+        const item = story.items?.[iid];
+        html += `<span class="item-chip">${escapeHtml(item?.name || iid)}</span>`;
+      }
+      html += `</div>`;
+      return html;
+    }
+
+    function renderDebug() {
+      return `<div class="debug">flags: ${formatFlags()}</div>`;
+    }
+
+    function formatFlags() {
+      return Object.entries(state.flags)
+        .filter(([k,v]) => v !== false && v !== 0 && v !== '')
+        .map(([k,v]) => `${k}=${JSON.stringify(v)}`)
+        .join(', ') || '(none set)';
+    }
+
+    function escapeHtml(s) {
+      return (s ?? '').toString().replace(/[&<>"']/g,
+        c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // ── puzzle rendering ─────────────────────────
+    function renderPuzzle(p) {
+      const container = document.createElement('div');
+      container.className = 'puzzle';
+      if (puzzleState[p.id]?.solved) {
+        container.innerHTML = `<h3>${escapeHtml(p.prompt)} <span class="solved-badge">solved</span></h3>
+          <div>${escapeHtml(p.solved_text)}</div>`;
+        return container;
+      }
+      const ps = puzzleState[p.id] ||= { attempts: 0, streak: 0, tier: 'medium', solved: false };
+      const tier = p.adaptive ? ps.tier : null;
+      const config = tier && p.difficulty_tiers ? p.difficulty_tiers[tier] : p.config;
+
+      container.innerHTML = `
+        <h3>${escapeHtml(p.prompt)}</h3>
+        ${tier ? `<div class="tier">tier: ${tier}</div>` : ''}
+        <div class="prompt" id="q-${p.id}">${escapeHtml(config.question || config.prompt || '')}</div>
+        <div class="choice-row" id="choices-${p.id}"></div>
+        <div class="hint" id="hint-${p.id}" style="display:none">${escapeHtml(p.hint_text || '')}</div>
+      `;
+
+      setTimeout(() => renderPuzzleBody(p, container, config), 0);
+      return container;
+    }
+
+    function renderPuzzleBody(p, container, config) {
+      const choiceBox = container.querySelector(`#choices-${p.id}`);
+      const ps = puzzleState[p.id];
+
+      const solve = () => {
+        ps.solved = true;
+        applyEffects(p.on_solved);
+        checkArcBeats();
+        save();
+        render();
+        drainNarration();
+      };
+      const tryWrong = (btn) => {
+        btn.classList.add('wrong');
+        ps.attempts += 1;
+        ps.streak = 0;
+        if (p.adaptive && ps.attempts >= 2 && ps.tier !== 'easy') {
+          ps.tier = ps.tier === 'hard' ? 'medium' : 'easy';
+        }
+        if (ps.attempts >= 2) container.querySelector(`#hint-${p.id}`).style.display = 'block';
+        setTimeout(() => btn.classList.remove('wrong'), 400);
+      };
+      const tryRight = () => {
+        if (p.adaptive) {
+          ps.streak += 1;
+          if (ps.streak >= 2 && ps.tier !== 'hard') ps.tier = ps.tier === 'easy' ? 'medium' : 'hard';
+        }
+        solve();
+      };
+
+      switch (p.type) {
+        case 'count-and-solve':
+        case 'pattern-match': {
+          const answer = config.answer;
+          for (const choice of config.choices) {
+            const b = document.createElement('button');
+            b.textContent = choice;
+            b.onclick = () => (String(choice) === String(answer) ? tryRight() : tryWrong(b));
+            choiceBox.appendChild(b);
+          }
+          break;
+        }
+        case 'word-match': {
+          // Pairs: [word/letter, match]. Render two columns; clicking any pair solves.
+          // For Phase 0 we simplify: show each pair as a single button with "word → match".
+          for (const [a, b] of config.pairs) {
+            const btn = document.createElement('button');
+            btn.textContent = `${a} = ${b}`;
+            btn.onclick = tryRight;
+            choiceBox.appendChild(btn);
+          }
+          break;
+        }
+        case 'sequence': {
+          // Order-the-items. Phase 0: show items, clicking in correct order wins.
+          const order = [];
+          const correct = config.correct_order;
+          for (const it of config.items) {
+            const btn = document.createElement('button');
+            btn.textContent = it;
+            btn.dataset.id = it;
+            btn.onclick = () => {
+              if (btn.disabled) return;
+              if (correct[order.length] === it) {
+                order.push(it);
+                btn.disabled = true;
+                btn.classList.add('correct');
+                if (order.length === correct.length) tryRight();
+              } else {
+                tryWrong(btn);
+              }
+            };
+            choiceBox.appendChild(btn);
+          }
+          break;
+        }
+        case 'sort': {
+          // Show each item with per-bucket buttons
+          const remaining = new Set(config.items.map(i => i.id));
+          const renderSort = () => {
+            choiceBox.innerHTML = '';
+            for (const item of config.items) {
+              if (!remaining.has(item.id)) continue;
+              const row = document.createElement('div');
+              row.style.cssText = 'width:100%;display:flex;gap:6px;align-items:center;';
+              row.innerHTML = `<span style="flex:1">${escapeHtml(item.label)}</span>`;
+              for (const bucket of config.buckets) {
+                const b = document.createElement('button');
+                b.textContent = bucket;
+                b.onclick = () => {
+                  if (item.bucket === bucket) {
+                    remaining.delete(item.id);
+                    if (!remaining.size) tryRight();
+                    else renderSort();
+                  } else {
+                    tryWrong(b);
+                  }
+                };
+                row.appendChild(b);
+              }
+              choiceBox.appendChild(row);
+            }
+          };
+          renderSort();
+          break;
+        }
+        case 'collect-and-deliver': {
+          // Show each target as a "tap to collect" button
+          const targets = new Set(config.targets);
+          const render = () => {
+            choiceBox.innerHTML = '';
+            for (const tid of config.targets) {
+              const collected = state.inventory.includes(tid);
+              const btn = document.createElement('button');
+              const item = story.items?.[tid];
+              btn.textContent = (collected ? '✓ ' : '') + (item?.name || tid);
+              btn.disabled = collected;
+              btn.onclick = () => {
+                state.inventory.push(tid);
+                state.flags.wonder_items_collected = (state.flags.wonder_items_collected || 0) + 1;
+                render();
+                if (config.targets.every(t => state.inventory.includes(t))) tryRight();
+              };
+              choiceBox.appendChild(btn);
+            }
+          };
+          render();
+          break;
+        }
+        case 'dialogue-gate':
+        case 'combine':
+        case 'navigate': {
+          const b = document.createElement('button');
+          b.textContent = '(primitive not yet implemented — click to pass)';
+          b.onclick = tryRight;
+          choiceBox.appendChild(b);
+          break;
+        }
+        default: {
+          choiceBox.textContent = `Unknown puzzle type: ${p.type}`;
+        }
+      }
+    }
+
+    // ── init / persistence ───────────────────────
+    function freshState() {
+      const flags = {};
+      for (const [k, f] of Object.entries(story.flags || {})) flags[k] = f.default;
+      return {
+        currentRoom: story.world.spawn.room,
+        flags,
+        inventory: [],
+        visited: new Set(),
+        revealed: new Set(),
+        beatsFired: new Set(),
+      };
+    }
+
+    function save() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          currentRoom: state.currentRoom,
+          flags: state.flags,
+          inventory: state.inventory,
+          visited: [...state.visited],
+          beatsFired: [...state.beatsFired],
+        }));
+      } catch {}
+    }
+    function load() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return false;
+        const s = JSON.parse(raw);
+        state = freshState();
+        Object.assign(state, {
+          currentRoom: s.currentRoom,
+          flags: s.flags,
+          inventory: s.inventory,
+          visited: new Set(s.visited),
+          beatsFired: new Set(s.beatsFired),
+        });
+        return true;
+      } catch { return false; }
+    }
+    function reset() {
+      localStorage.removeItem(STORAGE_KEY);
+      puzzleState = {};
+      state = freshState();
+      enterRoom(story.world.spawn.room);
+      render();
+      drainNarration();
+    }
+
+    async function init() {
+      const res = await fetch(STORY_URL);
+      story = await res.json();
+      document.getElementById('story-title').textContent = story.meta.title;
+      document.getElementById('story-meta').textContent =
+        `Episode ${story.meta.episode} · reading level ${story.meta.reading_level} · ~${story.meta.estimated_playtime_minutes} min · schema v${story.schema_version}`;
+
+      if (!load()) { state = freshState(); enterRoom(story.world.spawn.room); }
+      render();
+      drainNarration();
+    }
+
+    // ── autoplay test ────────────────────────────
+    // Walks a happy path by clicking the first available action at each step.
+    // Useful smoke test: proves the schema + engine can reach an ending.
+    async function autoplay() {
+      reset();
+      for (let step = 0; step < 80; step++) {
+        await sleep(120);
+        // Dismiss narrator card if any
+        const nc = document.querySelector('.narrator-card button');
+        if (nc) { nc.click(); continue; }
+
+        const room = story.world.rooms[state.currentRoom];
+
+        // Special case: scene 1 hatch
+        if (room.id === 'meadow-hatch' && !state.flags.hatch_opened) {
+          const btns = [...document.querySelectorAll('#exits button')];
+          const hatch = btns.find(b => b.textContent.includes('hatch'));
+          if (hatch) { hatch.click(); continue; }
+        }
+
+        // Solve the first unsolved puzzle
+        const pz = (room.puzzles_in_room || []).map(pid => story.puzzles[pid])
+          .find(p => p && !puzzleState[p.id]?.solved);
+        if (pz) { autoSolve(pz); continue; }
+
+        // Take first available exit
+        const exits = [...document.querySelectorAll('#exits button')].filter(b => !b.disabled);
+        if (exits.length) { exits[0].click(); continue; }
+
+        if (room.scene_type === 'finale' && state.flags.finale_solved) break;
+        break;
+      }
+      console.log('[autoplay] done. flags:', state.flags);
+    }
+
+    function autoSolve(p) {
+      const ps = puzzleState[p.id] ||= { attempts: 0, streak: 0, tier: 'medium', solved: false };
+      const tier = p.adaptive ? ps.tier : null;
+      const config = tier && p.difficulty_tiers ? p.difficulty_tiers[tier] : p.config;
+      switch (p.type) {
+        case 'count-and-solve':
+        case 'pattern-match': {
+          const buttons = [...document.querySelectorAll(`#choices-${p.id} button`)];
+          const right = buttons.find(b => String(b.textContent).trim() === String(config.answer));
+          right?.click();
+          break;
+        }
+        case 'word-match': {
+          document.querySelector(`#choices-${p.id} button`)?.click();
+          break;
+        }
+        case 'sequence': {
+          const correct = config.correct_order;
+          (async () => {
+            for (const id of correct) {
+              await sleep(80);
+              const b = [...document.querySelectorAll(`#choices-${p.id} button`)].find(x => x.dataset.id === id);
+              b?.click();
+            }
+          })();
+          break;
+        }
+        case 'sort': {
+          (async () => {
+            for (const item of config.items) {
+              await sleep(60);
+              const rows = [...document.querySelectorAll(`#choices-${p.id} > div`)];
+              const row = rows.find(r => r.textContent.includes(item.label.slice(0, 4)));
+              const bucketBtn = row && [...row.querySelectorAll('button')].find(b => b.textContent === item.bucket);
+              bucketBtn?.click();
+            }
+          })();
+          break;
+        }
+        case 'collect-and-deliver': {
+          (async () => {
+            const buttons = [...document.querySelectorAll(`#choices-${p.id} button`)];
+            for (const b of buttons) { await sleep(50); if (!b.disabled) b.click(); }
+          })();
+          break;
+        }
+        default: {
+          document.querySelector(`#choices-${p.id} button`)?.click();
+        }
+      }
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    return { init, reset, autoplay, _peek: () => ({ story, state, puzzleState }) };
+  })();
+
+  StoryQuest.init();
+  </script>
+</body>
+</html>
