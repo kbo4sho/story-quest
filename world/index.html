@@ -340,14 +340,47 @@
       // can close over Finn / Wren / Pip / mixers / loaded GLBs.
     };
 
-    // Place the Whispering Woods instance. One crossing region, centered at
-    // (14, -8), topic "bridges / counting".
+    // Lookout — a gentle hill with an NPC offering flavor dialogue. Proves
+    // the terrain pipeline supports raises as well as carves, and that a
+    // minimal template (no puzzle, no climax) slots into the same system.
+    const TEMPLATE_LOOKOUT = {
+      id: 'lookout',
+      terrainDelta(x, z, region) {
+        const dx = x - region.center.x;
+        const dz = z - region.center.z;
+        const r  = region.params.radius;
+        const r2 = r * r;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r2) return 0;
+        const t = 1 - d2 / r2;
+        return t * t * region.params.height;
+      },
+      // build(region) is assigned inside the async loader alongside CROSSING.
+    };
+
+    // Place two regions: the Whispering Woods crossing at (14, -8) and a
+    // lookout hill off to the northwest of spawn. Player can walk to either.
     regions.push({
       id: 'whispering-woods',
       template: TEMPLATE_CROSSING,
       center:   { x: 14, z: -8 },
       params:   { width: 2.8, depth: 3.8, core: 10, taper: 26 },
       topic:    { topic: 'bridges', concept: 'counting', name: 'Whispering Woods' },
+    });
+    regions.push({
+      id: 'quiet-overlook',
+      template: TEMPLATE_LOOKOUT,
+      center:   { x: -22, z: -10 },
+      params:   { radius: 9, height: 3.0 },
+      topic:    {
+        name: 'Quiet Overlook',
+        npcName: 'Mira',
+        lines: [
+          'Up here is the best view in the whole meadow.',
+          'On a clear day you can see all the way to the woods.',
+          'Safe travels, friend.',
+        ],
+      },
     });
 
     // Procedural audio — zero external assets. Pink-noise ambient loop plus
@@ -814,7 +847,6 @@
     // Region-scoped flag bag (state that lives across re-entry to a region but
     // not across page reloads). W2 grows this with puzzleSolved, etc.
     const flags = {
-      metBridgeKeeper: false,
       puzzleSolved:    false,
       climaxStarted:   false,
       bridgeRebuilt:   false,
@@ -871,12 +903,14 @@
     let dlgScript = null;
     let dlgIndex = 0;
     let dlgNpcGroup = null; // for dialogue-camera framing
+    let dlgActiveNpc = null; // so endDialogue can set the NPC's "met" flag
 
-    function startDialogue(script, npcGroup = null) {
+    function startDialogue(script, npcGroup = null, npc = null) {
       dlgScript = script;
       dlgIndex = 0;
       dialogueActive = true;
       dlgNpcGroup = npcGroup;
+      dlgActiveNpc = npc;
       dlgUI.panel.classList.add('visible');
       dlgUI.prompt.classList.remove('visible');
       // Cancel any in-progress walk so Finn settles in front of the NPC
@@ -938,7 +972,8 @@
       dlgScript = null;
       dlgNpcGroup = null;
       dlgUI.panel.classList.remove('visible');
-      flags.metBridgeKeeper = true;
+      if (dlgActiveNpc) dlgActiveNpc.met = true;
+      dlgActiveNpc = null;
       if (flags.puzzleSolved && !flags.climaxStarted && triggerClimax) {
         flags.climaxStarted = true;
         triggerClimax();
@@ -1092,7 +1127,7 @@
           triggerDist: 3.5,
           promptDist: 6.0,
           script: BRIDGE_KEEPER_SCRIPT,
-          when: () => !flags.metBridgeKeeper,
+          met: false,
         });
 
         // Bridge — two low stone piers at the ravine rim.
@@ -1174,8 +1209,36 @@
         };
       };
 
-      // Build each registered region's content. Future templates will branch
-      // here; for W3a there's just one (the Whispering Woods crossing).
+      // LOOKOUT template's content builder — a single NPC at the hilltop with
+      // a short, no-puzzle flavor dialogue from region.topic.lines.
+      TEMPLATE_LOOKOUT.build = function (region) {
+        const cx = region.center.x;
+        const cz = region.center.z;
+        const npcName = (region.topic && region.topic.npcName) || 'Wanderer';
+        const lines   = (region.topic && region.topic.lines) || ['Hello there!'];
+        const script  = lines.map((text, i) => ({
+          speaker: npcName,
+          text,
+          end: i === lines.length - 1,
+        }));
+
+        const npcGroup = new THREE.Group();
+        npcGroup.position.set(cx, heightAt(cx, cz), cz);
+        npcGroup.rotation.y = Math.atan2(-cx, -cz); // face toward spawn
+        scene.add(npcGroup);
+        const setup = setupKayKitChar(knightGlb, npcGroup, null, 1.0);
+        npcs.push({
+          id: `${region.id}:keeper`,
+          group: npcGroup,
+          mixer: setup.mixer,
+          triggerDist: 3.5,
+          promptDist: 6.0,
+          script,
+          met: false,
+        });
+      };
+
+      // Build each registered region's content.
       for (const r of regions) {
         if (r.template && r.template.build) r.template.build(r);
       }
@@ -1463,14 +1526,15 @@
       for (const n of npcs) {
         if (n.mixer) n.mixer.update(dt);
         if (dialogueActive) continue;
-        if (n.when && !n.when()) continue;
+        if (n.met) continue;                      // talk-once gate
+        if (n.when && !n.when()) continue;        // optional extra gating
         const d = finn.position.distanceTo(n.group.position);
         if (d < n.promptDist && d < nearestDist) {
           nearestPromptable = n;
           nearestDist = d;
         }
         if (d < n.triggerDist && !moving) {
-          startDialogue(n.script, n.group);
+          startDialogue(n.script, n.group, n);
           break;
         }
       }
