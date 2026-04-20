@@ -164,6 +164,28 @@
       background: #ffd96b;
       transform: translateY(1px);
     }
+    #dialogue-choices form {
+      display: flex;
+      flex: 1 1 100%;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    #dialogue-choices input[type="text"] {
+      flex: 1 1 auto;
+      min-height: 48px;
+      padding: 8px 14px;
+      font-size: 17px;
+      font-weight: 500;
+      color: #2c2a26;
+      background: #fff;
+      border: 2px solid #c79c3a;
+      border-radius: 12px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    #dialogue-choices input[type="text"]:focus {
+      border-color: #8a6a22;
+    }
     #dialogue-hint {
       margin-top: 10px;
       font-size: 14px;
@@ -403,11 +425,10 @@
       // can close over Finn / Wren / Pip / mixers / loaded GLBs.
     };
 
-    // Lookout — a gentle hill with an NPC offering flavor dialogue. Proves
-    // the terrain pipeline supports raises as well as carves, and that a
-    // minimal template (no puzzle, no climax) slots into the same system.
-    const TEMPLATE_LOOKOUT = {
-      id: 'lookout',
+    // Mound — gentle bell-shaped hill (formerly LOOKOUT). Kept under the
+    // old TEMPLATE_LOOKOUT alias so existing hardcoded regions keep working.
+    const TEMPLATE_MOUND = {
+      id: 'mound',
       terrainDelta(x, z, region) {
         const dx = x - region.center.x;
         const dz = z - region.center.z;
@@ -420,6 +441,118 @@
       },
       // build(region) is assigned inside the async loader alongside CROSSING.
     };
+    const TEMPLATE_LOOKOUT = TEMPLATE_MOUND; // backward-compat alias
+
+    // Cliff — sharp rise with a flat plateau on top. Good for tall, dramatic
+    // topics (volcanoes, mountains, planets).
+    const TEMPLATE_CLIFF = {
+      id: 'cliff',
+      terrainDelta(x, z, region) {
+        const dx = x - region.center.x;
+        const dz = z - region.center.z;
+        const r  = region.params.radius;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r * r) return 0;
+        const d = Math.sqrt(d2);
+        const inner = r * 0.5;
+        if (d <= inner) return region.params.height;
+        const t = 1 - (d - inner) / (r - inner);
+        return t * t * region.params.height;
+      },
+    };
+
+    // Basin — shallow carve downward with a gentle lip. Good for watery
+    // topics; NPC is placed at the north rim rather than the floor.
+    const TEMPLATE_BASIN = {
+      id: 'basin',
+      terrainDelta(x, z, region) {
+        const dx = x - region.center.x;
+        const dz = z - region.center.z;
+        const r  = region.params.radius;
+        const r2 = r * r;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r2) return 0;
+        const t = 1 - d2 / r2;
+        return -t * t * region.params.depth;
+      },
+    };
+
+    // Look-up table used by savedState restore to map a templateId back to
+    // its template object.
+    const TEMPLATES_BY_ID = {
+      crossing: TEMPLATE_CROSSING,
+      mound:    TEMPLATE_MOUND,
+      lookout:  TEMPLATE_MOUND, // back-compat with saves from before the rename
+      cliff:    TEMPLATE_CLIFF,
+      basin:    TEMPLATE_BASIN,
+    };
+
+    // ---- Topic dispatcher ----
+    // Keyword-based family detection. First keyword to match wins; topics
+    // with no match fall into 'default'. Later we'll swap this for an LLM.
+    const TOPIC_FAMILIES = [
+      { family: 'earthen', keywords: ['volcano','volcanoes','mountain','cliff','rock','cave','dinosaur','fossil','desert','earthquake','canyon','peak'] },
+      { family: 'watery',  keywords: ['ocean','sea','lake','river','pond','rain','water','fish','whale','crab','shark','ice','iceberg','waterfall','octopus','dolphin','coral','tide'] },
+      { family: 'wooded',  keywords: ['forest','tree','trees','woods','leaf','leaves','bird','squirrel','insect','bug','mushroom','oak','pine','jungle','moss'] },
+      { family: 'airy',    keywords: ['sky','cloud','star','planet','space','moon','sun','weather','storm','lightning','wind','tornado','rainbow','hurricane','rocket'] },
+    ];
+
+    const FAMILY_CONFIGS = {
+      earthen: { template: TEMPLATE_CLIFF, params: { radius: 11, height: 5.5 } },
+      watery:  { template: TEMPLATE_BASIN, params: { radius: 10, depth: 2.2 } },
+      wooded:  { template: TEMPLATE_MOUND, params: { radius: 10, height: 2.8 } },
+      airy:    { template: TEMPLATE_CLIFF, params: { radius: 9,  height: 6.5 } },
+      default: { template: TEMPLATE_MOUND, params: { radius: 9,  height: 3.0 } },
+    };
+
+    const FAMILY_NAMES = {
+      earthen: ['Flint', 'Tora', 'Cragg', 'Obsid'],
+      watery:  ['Marina', 'Brook', 'Delta', 'Coral'],
+      wooded:  ['Bram', 'Linden', 'Fern', 'Rowan'],
+      airy:    ['Skye', 'Zephyr', 'Lumen', 'Nimbus'],
+      default: ['Mira', 'Tala', 'Orin'],
+    };
+
+    function resolveTopicFamily(topicString) {
+      const lower = String(topicString || '').toLowerCase();
+      for (const entry of TOPIC_FAMILIES) {
+        for (const kw of entry.keywords) {
+          if (lower.includes(kw)) return entry.family;
+        }
+      }
+      return 'default';
+    }
+
+    function pickName(family) {
+      const pool = FAMILY_NAMES[family] || FAMILY_NAMES.default;
+      return pool[Math.floor(rng() * pool.length)];
+    }
+
+    // Turn an arbitrary topic string into a full region bundle. For W4-polish
+    // this is hand-written templated dialogue; W5 replaces it with LLM output.
+    function resolveTopic(topicString) {
+      const raw = String(topicString || '').trim();
+      const topic = raw || 'something new';
+      const family = resolveTopicFamily(topic);
+      const cfg = FAMILY_CONFIGS[family];
+      const npcName = pickName(family);
+      const nameCap = topic.charAt(0).toUpperCase() + topic.slice(1);
+      const lines = [
+        `Hi there — I am ${npcName}.`,
+        `You came to ask about ${topic}?`,
+        `It's a big subject. Come back any time if you want to explore more.`,
+      ];
+      return {
+        family,
+        template: cfg.template,
+        params: { ...cfg.params },
+        content: {
+          name: nameCap,
+          npcName,
+          lines,
+        },
+      };
+    }
 
     // Place two regions: the Whispering Woods crossing at (14, -8) and a
     // lookout hill off to the northwest of spawn. Player can walk to either.
@@ -453,11 +586,13 @@
       for (const sp of savedState.spawnedRegions) {
         regions.push({
           id:       sp.id,
-          template: TEMPLATE_LOOKOUT, // only spawn-template supported in W4b
+          template: TEMPLATES_BY_ID[sp.templateId] || TEMPLATE_MOUND,
           center:   sp.center,
           params:   sp.params,
           topic:    sp.topic,
           topicKey: sp.topicKey,
+          family:   sp.family,
+          subNpcs:  Array.isArray(sp.subNpcs) ? sp.subNpcs : [],
           restored: true,
         });
       }
@@ -610,11 +745,21 @@
           spawnedRegions: regions
             .filter((r) => r.topicKey)
             .map((r) => ({
-              id:       r.id,
-              topicKey: r.topicKey,
-              center:   { x: r.center.x, z: r.center.z },
-              params:   { ...r.params },
-              topic:    r.topic,
+              id:         r.id,
+              topicKey:   r.topicKey,
+              family:     r.family,
+              templateId: r.template && r.template.id,
+              center:     { x: r.center.x, z: r.center.z },
+              params:     { ...r.params },
+              topic:      r.topic,
+              subNpcs:    Array.isArray(r.subNpcs) ? r.subNpcs.map((s) => ({
+                id:       s.id,
+                topic:    s.topic,
+                npcName:  s.npcName,
+                lines:    s.lines,
+                offset:   s.offset,
+                met:      s._npcRef ? !!s._npcRef.met : !!s.met,
+              })) : [],
             })),
         };
         localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -758,46 +903,19 @@
     }
     groundGeo.setAttribute('color', new THREE.BufferAttribute(groundColors, 3));
 
-    // ---- Topic-driven region spawning (W4b) ----
-    // Hardcoded content bundle per topic. At spawn time we register a region
-    // that uses TEMPLATE_LOOKOUT; later phases can swap in topic-specific
-    // templates (volcano cone, ocean cliff) without changing this table.
-    const TOPIC_CONTENT = {
-      volcanoes: {
-        name: 'Emberpeak',
-        npcName: 'Fiora',
-        lines: [
-          'Hello there — I am Fiora, keeper of the mountain.',
-          'This mountain is made of very old rock from deep under the ground.',
-          'When pressure builds inside, the rock pushes up and out — that is an eruption.',
-          'Safe travels, little traveler.',
-        ],
-        hillParams: { radius: 10, height: 4.8 },
-      },
-      ocean: {
-        name: 'Salt Cliff',
-        npcName: 'Marina',
-        lines: [
-          'Up here on the cliff, you can almost hear the waves.',
-          'The ocean is full of creatures — fish, crabs, whales, tiny ones that glow in the dark.',
-          'Come back any time and we can talk about any of them.',
-        ],
-        hillParams: { radius: 9, height: 3.2 },
-      },
-      forest: {
-        name: 'Elderwood Ridge',
-        npcName: 'Bram',
-        lines: [
-          'These trees are very old.',
-          'Each one grows a little bit every year — some were saplings when your grandparents were kids.',
-          'Listen quietly and you might hear the wind in their leaves.',
-        ],
-        hillParams: { radius: 9, height: 2.8 },
-      },
-    };
+    // ---- Topic-driven region spawning (W4 polish: Option C) ----
+    // spawnRegion(topic) — unified entry point for every asked question.
+    // Flow:
+    //   1. Normalize the topic.
+    //   2. If an existing region already covers this exact topic → deepen it
+    //      (add a sub-NPC beside the region rather than spawn a new hill).
+    //   3. Otherwise resolve the topic's family and pick placement: near an
+    //      existing same-family region if possible (clustering), else a
+    //      fresh ring slot.
+    //   4. Register + rise terrain + build content.
 
-    // Fixed spawn anchors around the world — a question picks the first free
-    // one. Positions are inside TERRAIN_BOUND and spaced from existing regions.
+    // Fixed ring-slot anchors for fresh families. Positions are inside
+    // TERRAIN_BOUND and spaced from the prairie's existing regions.
     const SPAWN_SLOTS = [
       { x:  32, z:  22 },
       { x: -32, z:  22 },
@@ -805,20 +923,46 @@
       { x: -30, z: -34 },
       { x:   0, z:  38 },
     ];
+    const MIN_SLOT_CLEARANCE = 14;
+    function slotIsFree(cx, cz, clearance = MIN_SLOT_CLEARANCE) {
+      for (const r of regions) {
+        const d = Math.hypot(r.center.x - cx, r.center.z - cz);
+        if (d < clearance) return false;
+      }
+      return true;
+    }
     function pickFreeSpawnSlot() {
       for (const slot of SPAWN_SLOTS) {
-        let free = true;
-        for (const r of regions) {
-          const d = Math.hypot(r.center.x - slot.x, r.center.z - slot.z);
-          if (d < 14) { free = false; break; }
-        }
-        if (free) return slot;
+        if (slotIsFree(slot.x, slot.z)) return slot;
       }
       return null;
     }
 
-    // Active terrain-rise tweens. Each entry captures the mesh vertices inside
-    // a newly-spawned region's influence radius, their starting Y, and the
+    // Try to seat a new region within a ring around any same-family region.
+    // Falls back to a fresh ring slot if all nearby candidates are taken.
+    function pickPlacementForFamily(family) {
+      const sameFamily = regions.filter((r) => r.family === family);
+      if (sameFamily.length > 0) {
+        const CLUSTER_DISTS = [15, 17, 19];
+        const ANGLES_DEG = [45, 90, 135, 180, 225, 270, 315, 0];
+        for (const anchor of sameFamily) {
+          for (const dist of CLUSTER_DISTS) {
+            for (const deg of ANGLES_DEG) {
+              const a = (deg * Math.PI) / 180;
+              const cx = anchor.center.x + Math.cos(a) * dist;
+              const cz = anchor.center.z + Math.sin(a) * dist;
+              if (Math.abs(cx) > TERRAIN_BOUND - 6) continue;
+              if (Math.abs(cz) > TERRAIN_BOUND - 6) continue;
+              if (slotIsFree(cx, cz, MIN_SLOT_CLEARANCE)) return { x: cx, z: cz };
+            }
+          }
+        }
+      }
+      return pickFreeSpawnSlot();
+    }
+
+    // Active terrain-rise tweens. Each entry captures mesh vertices inside
+    // the newly-spawned region's influence radius, their starting Y, and the
     // target deltaY from terrainDelta. The tick loop advances them.
     const risingTweens = [];
     function beginTerrainRise(region, duration, onComplete) {
@@ -846,20 +990,69 @@
       });
     }
 
-    function spawnRegion(topicKey) {
-      const content = TOPIC_CONTENT[topicKey];
-      if (!content) return;
-      // If Leo already asked about this topic, don't spawn a duplicate.
-      if (regions.some((r) => r.topicKey === topicKey)) return;
-      const slot = pickFreeSpawnSlot();
+    // Normalize a topic string for same-topic matching. Lowercase + trim.
+    // Plurals aren't de-pluralized — "volcano" and "volcanoes" will be
+    // treated as different specific topics (they'll still cluster since
+    // both resolve to the same family).
+    function normalizeTopic(topic) {
+      return String(topic || '').toLowerCase().trim();
+    }
+
+    // Sub-NPC offsets spiral around a region center so multiple follow-ups
+    // fan out without overlapping.
+    function subNpcOffset(index) {
+      const angle = (index * 68) * Math.PI / 180;
+      const dist  = 5.5 + Math.floor(index / 5) * 2.5;
+      return { dx: Math.cos(angle) * dist, dz: Math.sin(angle) * dist };
+    }
+
+    // Placed inside the async loader later (needs knightGlb + setupKayKitChar).
+    let buildSubNpc = null;
+
+    function deepenRegion(region, topicString) {
+      if (!region.subNpcs) region.subNpcs = [];
+      const family = resolveTopicFamily(topicString);
+      const npcName = pickName(family);
+      const sub = {
+        id: `${region.id}:sub-${region.subNpcs.length + 1}-${Date.now()}`,
+        topic: topicString,
+        npcName,
+        lines: [
+          `Hi — I'm ${npcName}, a friend of ${region.topic && region.topic.npcName || 'this place'}.`,
+          `You came to ask about ${topicString}?`,
+          `That's worth a closer look. Wander the hill and you'll see.`,
+        ],
+        offset: subNpcOffset(region.subNpcs.length),
+        met: false,
+      };
+      region.subNpcs.push(sub);
+      if (buildSubNpc) buildSubNpc(region, sub);
+      saveState();
+    }
+
+    function spawnRegion(topicString) {
+      const rawKey = normalizeTopic(topicString);
+      if (!rawKey) return;
+      // Same topic already asked? Deepen that region instead of spawning.
+      const existing = regions.find((r) => r.topicKey && normalizeTopic(r.topicKey) === rawKey);
+      if (existing) {
+        deepenRegion(existing, topicString);
+        return;
+      }
+      // Fresh topic: resolve family + content, pick a clustered slot if same
+      // family exists, else a ring slot.
+      const resolved = resolveTopic(topicString);
+      const slot = pickPlacementForFamily(resolved.family);
       if (!slot) return;
       const region = {
-        id:       `spawned-${topicKey}-${Date.now()}`,
-        template: TEMPLATE_LOOKOUT,
+        id:       `spawned-${rawKey.replace(/\s+/g,'-')}-${Date.now()}`,
+        template: resolved.template,
         center:   slot,
-        params:   content.hillParams || { radius: 9, height: 3.0 },
-        topic:    content,
-        topicKey,
+        params:   resolved.params,
+        topic:    resolved.content,
+        topicKey: topicString,
+        family:   resolved.family,
+        subNpcs:  [],
       };
       regions.push(region);
       beginTerrainRise(region, 1500, () => {
@@ -1185,8 +1378,14 @@
         flags.puzzleSolved = true;
         audio.puzzleChime();
       }
-      if (node.choices && node.choices.length) {
+      const hasChoices = node.choices && node.choices.length;
+      const hasInput   = !!node.input;
+      if (hasChoices || hasInput) {
         dlgUI.hint.classList.add('hidden');
+      } else {
+        dlgUI.hint.classList.remove('hidden');
+      }
+      if (hasChoices) {
         for (const choice of node.choices) {
           const btn = document.createElement('button');
           btn.textContent = choice.text;
@@ -1198,8 +1397,33 @@
           });
           dlgUI.choices.appendChild(btn);
         }
-      } else {
-        dlgUI.hint.classList.remove('hidden');
+      }
+      if (hasInput) {
+        const form = document.createElement('form');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = node.input.placeholder || '';
+        input.autocomplete = 'off';
+        input.autocapitalize = 'sentences';
+        input.spellcheck = true;
+        const submit = document.createElement('button');
+        submit.type = 'submit';
+        submit.textContent = node.input.submitText || 'Ask';
+        form.appendChild(input);
+        form.appendChild(submit);
+        form.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          const value = (input.value || '').trim();
+          if (!value) return;
+          if (node.input.spawnFromInput) spawnRegion(value);
+          const gotoId = node.input.goto;
+          const idx = gotoId ? dlgScript.findIndex((n) => n.id === gotoId) : -1;
+          if (idx >= 0) { dlgIndex = idx; showDialogueNode(); }
+          else          { endDialogue(); }
+        });
+        dlgUI.choices.appendChild(form);
+        // Don't auto-focus on touch devices (pops up keyboard); desktop is OK.
+        if (matchMedia('(hover: hover)').matches) setTimeout(() => input.focus(), 80);
       }
     }
     function advanceDialogue() {
@@ -1269,18 +1493,22 @@
     // choices are hardcoded stand-ins; W4b will wire each choice to spawn a
     // matching region on the map.
     const CAMPFIRE_SCRIPT = [
-      { speaker: 'Wren', text: 'What would you like to learn about?',
+      { id: 'ask', speaker: 'Wren', text: 'What would you like to learn about?',
         choices: [
-          { text: 'Volcanoes', goto: 'pick-volcanoes', spawnTopic: 'volcanoes' },
-          { text: 'The ocean', goto: 'pick-ocean',     spawnTopic: 'ocean' },
-          { text: 'The forest', goto: 'pick-forest',   spawnTopic: 'forest' },
-          { text: 'Maybe later',  goto: 'pick-later' },
+          { text: 'Volcanoes', goto: 'picked', spawnTopic: 'volcanoes' },
+          { text: 'The ocean', goto: 'picked', spawnTopic: 'ocean' },
+          { text: 'The forest', goto: 'picked', spawnTopic: 'forest' },
+          { text: 'Maybe later', goto: 'pick-later' },
         ],
+        input: {
+          placeholder: 'Or type your own topic…',
+          submitText:  'Ask',
+          spawnFromInput: true,
+          goto: 'picked',
+        },
       },
-      { id: 'pick-volcanoes', speaker: 'Wren', text: "Volcanoes — let's go find out!", end: true },
-      { id: 'pick-ocean',     speaker: 'Wren', text: "The ocean — let's go find out!", end: true },
-      { id: 'pick-forest',    speaker: 'Wren', text: "The forest — let's go find out!", end: true },
-      { id: 'pick-later',     speaker: 'Wren', text: 'Come back to the campfire any time.', end: true },
+      { id: 'picked',     speaker: 'Wren', text: "Let's go find out!", end: true },
+      { id: 'pick-later', speaker: 'Wren', text: 'Come back to the campfire any time.', end: true },
     ];
 
     // KayKit characters hold equipment as named child meshes. Hide them so the
@@ -1494,11 +1722,19 @@
         };
       };
 
-      // LOOKOUT template's content builder — a single NPC at the hilltop with
-      // a short, no-puzzle flavor dialogue from region.topic.lines.
-      TEMPLATE_LOOKOUT.build = function (region, _saved) {
+      // Shared build for any dynamic "hill with an NPC on top" template. Used
+      // by MOUND / CLIFF / BASIN. The NPC position depends on the template
+      // geometry: top-of-hill for MOUND/CLIFF, north of the rim for BASIN.
+      function buildDynamicNpcScene(region, saved) {
+        const tpl = region.template;
         const cx = region.center.x;
         const cz = region.center.z;
+        let nx = cx;
+        let nz = cz;
+        if (tpl.id === 'basin') {
+          const r = region.params.radius || 9;
+          nz = cz + r + 1.5; // just past the north rim
+        }
         const npcName = (region.topic && region.topic.npcName) || 'Wanderer';
         const lines   = (region.topic && region.topic.lines) || ['Hello there!'];
         const script  = lines.map((text, i) => ({
@@ -1508,8 +1744,8 @@
         }));
 
         const npcGroup = new THREE.Group();
-        npcGroup.position.set(cx, heightAt(cx, cz), cz);
-        npcGroup.rotation.y = Math.atan2(-cx, -cz); // face toward spawn
+        npcGroup.position.set(nx, heightAt(nx, nz), nz);
+        npcGroup.rotation.y = Math.atan2(-nx, -nz); // face toward spawn
         scene.add(npcGroup);
         const setup = setupKayKitChar(knightGlb, npcGroup, null, 1.0);
         npcs.push({
@@ -1519,8 +1755,49 @@
           triggerDist: 3.5,
           promptDist: 6.0,
           script,
-          met: false,
+          met: !!(saved && saved.npcs && saved.npcs.find &&
+                  saved.npcs.find((n) => n.id === `${region.id}:keeper`) &&
+                  saved.npcs.find((n) => n.id === `${region.id}:keeper`).met),
         });
+
+        // Rebuild any sub-NPCs previously added via deepening.
+        if (Array.isArray(region.subNpcs)) {
+          for (const sub of region.subNpcs) buildSubNpc(region, sub);
+        }
+      }
+      TEMPLATE_MOUND.build = buildDynamicNpcScene;
+      TEMPLATE_CLIFF.build = buildDynamicNpcScene;
+      TEMPLATE_BASIN.build = buildDynamicNpcScene;
+
+      // Sub-NPC builder — placed once here so the module-level deepenRegion
+      // can call through to it via the `buildSubNpc` slot.
+      buildSubNpc = function (region, sub) {
+        const cx = region.center.x;
+        const cz = region.center.z;
+        const nx = cx + sub.offset.dx;
+        const nz = cz + sub.offset.dz;
+        const script = sub.lines.map((text, i) => ({
+          speaker: sub.npcName,
+          text,
+          end: i === sub.lines.length - 1,
+        }));
+        const npcGroup = new THREE.Group();
+        npcGroup.position.set(nx, heightAt(nx, nz), nz);
+        npcGroup.rotation.y = Math.atan2(cx - nx, cz - nz);
+        scene.add(npcGroup);
+        const setup = setupKayKitChar(knightGlb, npcGroup, null, 1.0);
+        const npc = {
+          id: sub.id,
+          group: npcGroup,
+          mixer: setup.mixer,
+          triggerDist: 3.0,
+          promptDist: 5.0,
+          script,
+          met: !!sub.met,
+        };
+        npcs.push(npc);
+        // Keep the saved record in sync when met flips.
+        Object.defineProperty(sub, '_npcRef', { value: npc, enumerable: false });
       };
 
       // Build each registered region's content.
