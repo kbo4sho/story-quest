@@ -81,43 +81,43 @@
     const BIOMES = {
       prairie: {
         sky:  { top: 0x7fc4e8, bottom: 0xfce9c1 },
-        fog:  { color: 0xdceaec, near: 55, far: 130 },
+        fog:  { color: 0xdceaec, near: 25, far: 85 },
         height: { octaves: [[0.018, 1.8], [0.05, 0.5], [0.12, 0.15]] },
         ground: { low: 0x79a846, mid: 0x9ecf57, high: 0xcbe08a, jitter: 0.04, span: [-1.2, 2.0] },
         hemi: { sky: 0xffe9b3, ground: 0x6b8c3a, intensity: 0.7 },
         sun:  { color: 0xfff1cf, intensity: 1.0 },
-        grassTuft: { color: 0x6fa83d, count: 90, minDist: 1.2 },
-        flowerProc: { count: 55, minDist: 1.3 },
+        grassTuft: { color: 0x6fa83d, count: 180, minDist: 0.9 },
+        flowerProc: { count: 110, minDist: 1.0 },
         props: [
-          { url: 'tree-oak.glb',     count: 18, minDist: 4.0, scale: [1.0, 1.6] },
-          { url: 'tree-birch.glb',   count: 10, minDist: 4.5, scale: [1.0, 1.6] },
-          { url: 'bush-leafy.glb',   count: 28, minDist: 2.2, scale: [0.8, 1.3] },
-          { url: 'bush.glb',         count: 18, minDist: 2.4, scale: [0.9, 1.4] },
-          { url: 'stump.glb',        count: 10, minDist: 3.0, scale: [0.7, 1.2] },
-          { url: 'log.glb',          count: 6,  minDist: 3.5, scale: [0.8, 1.2] },
-          { url: 'grass-tall.glb',   count: 40, minDist: 1.6, scale: [0.8, 1.3] },
-          { url: 'flower-teal.glb',  count: 25, minDist: 1.4, scale: [0.8, 1.3] },
-          { url: 'rock.glb',         count: 14, minDist: 3.0, scale: [0.6, 1.0] },
+          { url: 'tree-oak.glb',     count: 38, minDist: 3.2, scale: [1.0, 1.6] },
+          { url: 'tree-birch.glb',   count: 22, minDist: 3.6, scale: [1.0, 1.6] },
+          { url: 'bush-leafy.glb',   count: 60, minDist: 1.8, scale: [0.8, 1.3] },
+          { url: 'bush.glb',         count: 38, minDist: 2.0, scale: [0.9, 1.4] },
+          { url: 'stump.glb',        count: 22, minDist: 2.6, scale: [0.7, 1.2] },
+          { url: 'log.glb',          count: 14, minDist: 3.0, scale: [0.8, 1.2] },
+          { url: 'grass-tall.glb',   count: 90, minDist: 1.3, scale: [0.8, 1.3] },
+          { url: 'flower-teal.glb',  count: 55, minDist: 1.2, scale: [0.8, 1.3] },
+          { url: 'rock.glb',         count: 30, minDist: 2.4, scale: [0.6, 1.0] },
         ],
       },
       highland: {
         sky:  { top: 0x6b8fad, bottom: 0xc9d4da },
-        fog:  { color: 0xc4cfd3, near: 45, far: 120 },
+        fog:  { color: 0xc4cfd3, near: 22, far: 75 },
         height: { octaves: [[0.018, 3.4], [0.05, 1.2], [0.12, 0.35]] },
         ground: { low: 0x6a6a56, mid: 0x8d8d74, high: 0xc2c2b0, jitter: 0.05, span: [-2.0, 3.8] },
         hemi: { sky: 0xdbe1e6, ground: 0x5a5f4e, intensity: 0.55 },
         sun:  { color: 0xf2eddc, intensity: 0.85 },
-        grassTuft: { color: 0x7f8a5a, count: 35, minDist: 1.8 },
-        flowerProc: { count: 8, minDist: 3.0 },
+        grassTuft: { color: 0x7f8a5a, count: 80, minDist: 1.4 },
+        flowerProc: { count: 22, minDist: 2.4 },
         props: [
-          { url: 'tree-pine.glb',       count: 14, minDist: 3.8, scale: [0.9, 1.3] },
-          { url: 'tree-pine-tall.glb',  count: 10, minDist: 4.5, scale: [0.9, 1.4] },
-          { url: 'tree-fir.glb',        count: 16, minDist: 4.0, scale: [0.9, 1.4] },
-          { url: 'boulder.glb',         count: 10, minDist: 4.0, scale: [0.8, 1.4] },
-          { url: 'rock-chunky.glb',     count: 18, minDist: 3.0, scale: [0.7, 1.3] },
-          { url: 'rock-mossy.glb',      count: 14, minDist: 2.5, scale: [0.7, 1.2] },
-          { url: 'rock.glb',            count: 22, minDist: 2.2, scale: [0.5, 1.0] },
-          { url: 'mushroom.glb',        count: 12, minDist: 2.0, scale: [0.9, 1.4] },
+          { url: 'tree-pine.glb',       count: 38, minDist: 3.0, scale: [0.9, 1.3] },
+          { url: 'tree-pine-tall.glb',  count: 24, minDist: 3.6, scale: [0.9, 1.4] },
+          { url: 'tree-fir.glb',        count: 38, minDist: 3.2, scale: [0.9, 1.4] },
+          { url: 'boulder.glb',         count: 22, minDist: 3.2, scale: [0.8, 1.4] },
+          { url: 'rock-chunky.glb',     count: 44, minDist: 2.4, scale: [0.7, 1.3] },
+          { url: 'rock-mossy.glb',      count: 32, minDist: 2.0, scale: [0.7, 1.2] },
+          { url: 'rock.glb',            count: 50, minDist: 1.8, scale: [0.5, 1.0] },
+          { url: 'mushroom.glb',        count: 28, minDist: 1.6, scale: [0.9, 1.4] },
         ],
       },
     };
@@ -253,17 +253,69 @@
     ground.receiveShadow = true;
     scene.add(ground);
 
+    // Wind sway — height-weighted vertex displacement injected into existing
+    // MeshLambert/MeshStandard materials via onBeforeCompile. Bottom vertices
+    // stay rooted; top vertices ride a sine wave whose phase comes from the
+    // model matrix so each instance sways out of phase.
+    const swayMaterials = [];
+    function attachSway(material, options = {}) {
+      const strength  = options.strength  ?? 0.04;
+      const freq      = options.freq      ?? 1.4;
+      const maxHeight = options.maxHeight ?? 1.5;
+      const original = material.onBeforeCompile;
+      material.onBeforeCompile = (shader) => {
+        if (original) original(shader);
+        shader.uniforms.uSwayTime      = { value: 0 };
+        shader.uniforms.uSwayStrength  = { value: strength };
+        shader.uniforms.uSwayFreq      = { value: freq };
+        shader.uniforms.uSwayMaxHeight = { value: maxHeight };
+        material.userData.swayUniforms = shader.uniforms;
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', `
+            #include <common>
+            uniform float uSwayTime;
+            uniform float uSwayStrength;
+            uniform float uSwayFreq;
+            uniform float uSwayMaxHeight;
+          `)
+          .replace('#include <begin_vertex>', `
+            #include <begin_vertex>
+            float swayWeight = clamp(transformed.y / uSwayMaxHeight, 0.0, 1.0);
+            vec4 swayWorld = modelMatrix * vec4(transformed, 1.0);
+            float phase = swayWorld.x * 0.3 + swayWorld.z * 0.4;
+            transformed.x += sin(uSwayTime * uSwayFreq + phase) * swayWeight * uSwayStrength;
+            transformed.z += cos(uSwayTime * uSwayFreq * 0.7 + phase) * swayWeight * uSwayStrength * 0.6;
+          `);
+      };
+      material.needsUpdate = true;
+      swayMaterials.push(material);
+    }
+    function applySwayToScene(root, options) {
+      const seen = new Set();
+      root.traverse((n) => {
+        if (!n.isMesh || !n.material) return;
+        const mats = Array.isArray(n.material) ? n.material : [n.material];
+        for (const m of mats) {
+          if (seen.has(m.uuid)) continue;
+          seen.add(m.uuid);
+          attachSway(m, options);
+        }
+      });
+    }
+
     // Ground-cover factories (grass, flowers) — primitive detail that sits
     // alongside the Quaternius kit (trees, rocks, bushes are loaded below).
+    // Shared material for all grass tufts so sway shader is attached once.
+    const grassTuftMat = new THREE.MeshLambertMaterial({ color: biome.grassTuft.color });
+    attachSway(grassTuftMat, { strength: 0.05, freq: 1.8, maxHeight: 0.45 });
     function makeGrassTuft() {
       const g = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: biome.grassTuft.color });
       const count = 2 + Math.floor(rng() * 3);
       for (let i = 0; i < count; i++) {
         const h = 0.28 + rng() * 0.18;
         const blade = new THREE.Mesh(
           new THREE.ConeGeometry(0.055, h, 4),
-          mat
+          grassTuftMat
         );
         blade.position.set((rng() - 0.5) * 0.18, h / 2, (rng() - 0.5) * 0.18);
         blade.rotation.set((rng() - 0.5) * 0.35, rng() * Math.PI, (rng() - 0.5) * 0.35);
@@ -333,6 +385,7 @@
         if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; }
       });
     }
+
     function pickClip(clips, keywords) {
       // Prefer exact match on the tail after any "Prefix|" (so "Rig|Idle_Loop"
       // with keyword "idle_loop" wins over "Crouch_Idle_Loop").
@@ -461,6 +514,17 @@
       for (let i = 0; i < biome.props.length; i++) {
         const spec = biome.props[i];
         const glb = propGlbs[i];
+        // Attach sway to foliage materials (trees, bushes, grass, flowers).
+        // Skip rocks, boulders, mushrooms, stumps, logs — they shouldn't sway.
+        const url = spec.url.toLowerCase();
+        if (/tree|bush|grass|flower/.test(url)) {
+          const opts = url.includes('tree')
+            ? { strength: 0.06, freq: 1.0, maxHeight: 3.0 }
+            : url.includes('bush')
+              ? { strength: 0.05, freq: 1.4, maxHeight: 0.9 }
+              : { strength: 0.07, freq: 1.8, maxHeight: 0.6 };
+          applySwayToScene(glb.scene, opts);
+        }
         scatter(spec.count, () => {
           const obj = glb.scene.clone(true);
           applyShadows(obj);
@@ -710,6 +774,13 @@
       // Sun / shadow camera tracks Finn so shadows stay crisp anywhere in the world
       sun.target.position.copy(finn.position);
       sun.position.copy(finn.position).add(SUN_OFFSET);
+
+      // Wind sway — push current time into all swayable materials' uniforms.
+      const swayT = performance.now() * 0.001;
+      for (let i = 0; i < swayMaterials.length; i++) {
+        const u = swayMaterials[i].userData.swayUniforms;
+        if (u && u.uSwayTime) u.uSwayTime.value = swayT;
+      }
 
       // Camera smoothing
       desiredCamPos.copy(finn.position).add(cameraOffset);
