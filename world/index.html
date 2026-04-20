@@ -75,46 +75,46 @@
       left: env(safe-area-inset-left, 0);
       right: env(safe-area-inset-right, 0);
       bottom: env(safe-area-inset-bottom, 0);
-      padding: 18px 20px 22px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.98));
+      padding: 12px 18px 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,255,255,0.96));
       border-top: 3px solid #cbb98a;
-      box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.18);
+      box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.15);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       color: #2c2a26;
-      max-height: 45vh;
+      max-height: 30vh;
       overflow: hidden;
       display: none;
     }
     #dialogue-panel.visible { display: block; }
     #dialogue-speaker {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       color: #6b5a32;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     #dialogue-text {
-      font-size: 22px;
-      line-height: 1.35;
-      min-height: 64px;
+      font-size: 19px;
+      line-height: 1.3;
+      min-height: 44px;
     }
     #dialogue-choices {
-      margin-top: 14px;
+      margin-top: 10px;
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 8px;
     }
     #dialogue-choices button {
-      flex: 1 1 200px;
-      min-height: 56px;
-      padding: 10px 18px;
-      font-size: 18px;
+      flex: 1 1 160px;
+      min-height: 48px;
+      padding: 8px 16px;
+      font-size: 17px;
       font-weight: 600;
       color: #2c2a26;
       background: #ffe9a8;
       border: 2px solid #c79c3a;
-      border-radius: 14px;
+      border-radius: 12px;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
     }
@@ -574,6 +574,7 @@
     // not across page reloads). W2 grows this with puzzleSolved, etc.
     const flags = {
       metBridgeKeeper: false,
+      puzzleSolved:    false,
     };
 
     // NPC registry — Finn checks proximity each tick and auto-triggers the
@@ -592,16 +593,26 @@
     let dialogueActive = false;
     let dlgScript = null;
     let dlgIndex = 0;
+    let dlgNpcGroup = null; // for dialogue-camera framing
 
-    function startDialogue(script) {
+    function startDialogue(script, npcGroup = null) {
       dlgScript = script;
       dlgIndex = 0;
       dialogueActive = true;
+      dlgNpcGroup = npcGroup;
       dlgUI.panel.classList.add('visible');
       dlgUI.prompt.classList.remove('visible');
       // Cancel any in-progress walk so Finn settles in front of the NPC
       moving = false;
       marker.visible = false;
+      // Turn Finn to face the NPC so the framing reads as a conversation
+      if (npcGroup) {
+        facing = Math.atan2(
+          npcGroup.position.x - finn.position.x,
+          npcGroup.position.z - finn.position.z,
+        );
+        finn.rotation.y = facing;
+      }
       showDialogueNode();
     }
     function showDialogueNode() {
@@ -609,6 +620,7 @@
       dlgUI.speaker.textContent = node.speaker;
       dlgUI.text.textContent    = node.text;
       dlgUI.choices.innerHTML   = '';
+      if (node.solved) flags.puzzleSolved = true;
       if (node.choices && node.choices.length) {
         dlgUI.hint.classList.add('hidden');
         for (const choice of node.choices) {
@@ -630,6 +642,12 @@
       const node = dlgScript[dlgIndex];
       if (node.choices && node.choices.length) return; // wait for choice click
       if (node.end) { endDialogue(); return; }
+      if (node.goto) {
+        const idx = dlgScript.findIndex((n) => n.id === node.goto);
+        if (idx >= 0) { dlgIndex = idx; showDialogueNode(); return; }
+        endDialogue();
+        return;
+      }
       dlgIndex++;
       if (dlgIndex >= dlgScript.length) endDialogue();
       else                              showDialogueNode();
@@ -637,12 +655,13 @@
     function endDialogue() {
       dialogueActive = false;
       dlgScript = null;
+      dlgNpcGroup = null;
       dlgUI.panel.classList.remove('visible');
       flags.metBridgeKeeper = true;
     }
 
-    // Bridge Keeper script — first beat of the Whispering Woods port (W2a).
-    // The puzzle and four-beat climax come in W2b and W2c.
+    // Bridge Keeper script — Whispering Woods port. W2a intro + W2b counting
+    // puzzle. W2c climax beats land in the next slice.
     const BRIDGE_KEEPER_SCRIPT = [
       { speaker: 'Bridge Keeper', text: 'Halt, traveler!' },
       { speaker: 'Bridge Keeper', text: "My bridge is broken — the planks are scattered everywhere." },
@@ -655,8 +674,21 @@
           { text: 'Maybe later.',     goto: 'decline' },
         ],
       },
-      { id: 'accept',  speaker: 'Bridge Keeper', text: 'Wonderful! Look around — count what you see.', end: true },
+      { id: 'accept',  speaker: 'Bridge Keeper', text: 'Wonderful! Look around — count what you see.', goto: 'count' },
       { id: 'decline', speaker: 'Bridge Keeper', text: 'Come back any time, kind traveler.',           end: true },
+      {
+        id: 'count',
+        speaker: 'Bridge Keeper',
+        text:    'How many planks do you count?',
+        choices: [
+          { text: '4', goto: 'wrong' },
+          { text: '5', goto: 'wrong' },
+          { text: '6', goto: 'right' },
+          { text: '7', goto: 'wrong' },
+        ],
+      },
+      { id: 'wrong', speaker: 'Bridge Keeper', text: 'Hmm, try counting again.', goto: 'count' },
+      { id: 'right', speaker: 'Bridge Keeper', text: "That's right! Six planks!", solved: true, end: true },
     ];
 
     // KayKit characters hold equipment as named child meshes. Hide them so the
@@ -694,12 +726,13 @@
     }
 
     (async () => {
-      // Load Finn, Wren, Pip, and the Bridge Keeper (Knight) in parallel
-      const [finnGlb, wrenGlb, frogGlb, knightGlb] = await Promise.all([
+      // Load characters + the log GLB used for puzzle planks in parallel
+      const [finnGlb, wrenGlb, frogGlb, knightGlb, logGlb] = await Promise.all([
         loadGLB('./assets/finn.glb'),
         loadGLB('./assets/wren.glb'),
         loadGLB('./assets/frog.glb'),
         loadGLB('./assets/knight.glb'),
+        loadGLB('./assets/log.glb'),
       ]);
 
       // Finn — KayKit Rogue_Hooded
@@ -760,6 +793,25 @@
         script: BRIDGE_KEEPER_SCRIPT,
         when: () => !flags.metBridgeKeeper,
       });
+
+      // Six plank primitives around the Bridge Keeper — flat wooden boards so
+      // they read clearly as "planks" rather than logs. Deterministic rng
+      // placement ensures the count is reliably six on every load.
+      const plankGeo = new THREE.BoxGeometry(1.6, 0.16, 0.5);
+      const plankMat = new THREE.MeshLambertMaterial({ color: 0x9c6a3a });
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2 + (rng() - 0.5) * 0.5;
+        const dist  = 2.6 + rng() * 2.6;
+        const px = bkPos.x + Math.cos(angle) * dist;
+        const pz = bkPos.z + Math.sin(angle) * dist;
+        const plank = new THREE.Mesh(plankGeo, plankMat);
+        plank.castShadow = true;
+        plank.receiveShadow = true;
+        plank.position.set(px, heightAt(px, pz) + 0.08, pz);
+        plank.rotation.y = rng() * Math.PI * 2;
+        plank.rotation.z = (rng() - 0.5) * 0.15; // slight random tilt
+        scene.add(plank);
+      }
       // Snap companions to their start offsets so they don't slide in from origin
       const startOffset = new THREE.Vector3();
       for (const c of companions) {
@@ -1028,7 +1080,7 @@
           nearestDist = d;
         }
         if (d < n.triggerDist && !moving) {
-          startDialogue(n.script);
+          startDialogue(n.script, n.group);
           break;
         }
       }
@@ -1084,13 +1136,34 @@
       particles.position.z = finn.position.z;
       particles.rotation.y += dt * 0.04;
 
-      // Camera smoothing
-      desiredCamPos.copy(finn.position).add(cameraOffset);
-      camera.position.lerp(desiredCamPos, 1 - Math.pow(0.001, dt));
-      cameraTarget.lerp(
-        new THREE.Vector3(finn.position.x, finn.position.y + 0.8, finn.position.z),
-        1 - Math.pow(0.001, dt)
-      );
+      // Camera smoothing — dialogue mode frames Finn + the NPC side-on; normal
+      // mode uses the fixed third-person follow offset.
+      const camK = 1 - Math.pow(0.001, dt);
+      if (dialogueActive && dlgNpcGroup) {
+        const midX = (finn.position.x + dlgNpcGroup.position.x) * 0.5;
+        const midZ = (finn.position.z + dlgNpcGroup.position.z) * 0.5;
+        const dx = dlgNpcGroup.position.x - finn.position.x;
+        const dz = dlgNpcGroup.position.z - finn.position.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const perpX =  dz / len;
+        const perpZ = -dx / len;
+        const dlgDist = 5.2;
+        const dlgHeight = 3.2;
+        const midY = heightAt(midX, midZ);
+        desiredCamPos.set(midX + perpX * dlgDist, midY + dlgHeight, midZ + perpZ * dlgDist);
+        camera.position.lerp(desiredCamPos, camK);
+        cameraTarget.lerp(
+          new THREE.Vector3(midX, midY + 1.2, midZ),
+          camK
+        );
+      } else {
+        desiredCamPos.copy(finn.position).add(cameraOffset);
+        camera.position.lerp(desiredCamPos, camK);
+        cameraTarget.lerp(
+          new THREE.Vector3(finn.position.x, finn.position.y + 0.8, finn.position.z),
+          camK
+        );
+      }
       camera.lookAt(cameraTarget);
 
       // Marker pulse + fade
