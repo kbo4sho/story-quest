@@ -1043,7 +1043,10 @@
       dlgScript = null;
       dlgNpcGroup = null;
       dlgUI.panel.classList.remove('visible');
-      if (dlgActiveNpc) dlgActiveNpc.met = true;
+      if (dlgActiveNpc) {
+        if (dlgActiveNpc.reusable) dlgActiveNpc.armed = false;
+        else                       dlgActiveNpc.met = true;
+      }
       dlgActiveNpc = null;
       if (flags.puzzleSolved && !flags.climaxStarted && triggerClimax) {
         flags.climaxStarted = true;
@@ -1081,6 +1084,24 @@
       },
       { id: 'wrong', speaker: 'Bridge Keeper', text: 'Hmm, try counting again.', goto: 'count' },
       { id: 'right', speaker: 'Bridge Keeper', text: "That's right! Six planks!", solved: true, end: true },
+    ];
+
+    // Campfire script — Wren asks what Leo wants to learn about. For W4a the
+    // choices are hardcoded stand-ins; W4b will wire each choice to spawn a
+    // matching region on the map.
+    const CAMPFIRE_SCRIPT = [
+      { speaker: 'Wren', text: 'What would you like to learn about?',
+        choices: [
+          { text: 'Volcanoes', goto: 'pick-volcanoes' },
+          { text: 'The ocean', goto: 'pick-ocean' },
+          { text: 'The forest', goto: 'pick-forest' },
+          { text: 'Maybe later',  goto: 'pick-later' },
+        ],
+      },
+      { id: 'pick-volcanoes', speaker: 'Wren', text: "Volcanoes — let's go find out!", end: true },
+      { id: 'pick-ocean',     speaker: 'Wren', text: "The ocean — let's go find out!", end: true },
+      { id: 'pick-forest',    speaker: 'Wren', text: "The forest — let's go find out!", end: true },
+      { id: 'pick-later',     speaker: 'Wren', text: 'Come back to the campfire any time.', end: true },
     ];
 
     // KayKit characters hold equipment as named child meshes. Hide them so the
@@ -1328,6 +1349,60 @@
         if (r.template && r.template.build) r.template.build(r, savedState);
       }
 
+      // Campfire — the always-available "ask a question" hub. Wren stands near
+      // it; tapping starts the campfire dialogue (for W4a this is a hardcoded
+      // topic picker; W4b will wire the chosen topic to a region spawn).
+      const campfire = new THREE.Group();
+      const cfPos = { x: 2, z: 2 };
+      const logMat = new THREE.MeshLambertMaterial({ color: 0x5a3a1f });
+      const logGeo = new THREE.CylinderGeometry(0.09, 0.11, 0.95, 6);
+      for (let i = 0; i < 5; i++) {
+        const log = new THREE.Mesh(logGeo, logMat);
+        const angle = (i / 5) * Math.PI * 2;
+        log.position.set(Math.cos(angle) * 0.18, 0.3, Math.sin(angle) * 0.18);
+        log.rotation.z = Math.PI / 7;
+        log.rotation.y = angle;
+        log.castShadow = true;
+        campfire.add(log);
+      }
+      // Base stones around the logs
+      const stoneSmallMat = new THREE.MeshLambertMaterial({ color: 0x7b766a });
+      for (let i = 0; i < 7; i++) {
+        const stone = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), stoneSmallMat);
+        const a = (i / 7) * Math.PI * 2 + 0.15;
+        stone.position.set(Math.cos(a) * 0.55, 0.08, Math.sin(a) * 0.55);
+        stone.rotation.y = rng() * Math.PI;
+        stone.castShadow = true;
+        stone.receiveShadow = true;
+        campfire.add(stone);
+      }
+      const flame = new THREE.Mesh(
+        new THREE.ConeGeometry(0.26, 0.6, 7),
+        new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.95 })
+      );
+      flame.position.y = 0.62;
+      campfire.add(flame);
+      const flameLight = new THREE.PointLight(0xffa55a, 0.9, 7, 2);
+      flameLight.position.y = 0.8;
+      campfire.add(flameLight);
+
+      campfire.position.set(cfPos.x, heightAt(cfPos.x, cfPos.z), cfPos.z);
+      scene.add(campfire);
+      campfireFlame = flame;
+      campfireLight = flameLight;
+
+      npcs.push({
+        id: 'campfire',
+        group: campfire,
+        mixer: null,
+        triggerDist: 2.4,
+        promptDist: 4.5,
+        script: CAMPFIRE_SCRIPT,
+        met: false,
+        reusable: true, // Leo can walk up and ask again as many times as he wants
+        armed: true,    // re-arms only after he leaves the prompt zone
+      });
+
       // Apply saved world state now that NPCs exist: Finn position + facing,
       // flags bag, per-NPC met. Skipped cleanly on first launch.
       if (savedState) {
@@ -1462,6 +1537,8 @@
     let walkPhase = 0;
     let lastFootstep = 0; // perf time of last footstep SFX
     let lastSave = 0;     // perf time of last periodic save
+    let campfireFlame = null;
+    let campfireLight = null;
 
     // Camera rig — third-person follow
     const cameraOffset = new THREE.Vector3(0, 6, 9);
@@ -1633,10 +1710,14 @@
       let nearestDist = Infinity;
       for (const n of npcs) {
         if (n.mixer) n.mixer.update(dt);
-        if (dialogueActive) continue;
-        if (n.met) continue;                      // talk-once gate
-        if (n.when && !n.when()) continue;        // optional extra gating
         const d = finn.position.distanceTo(n.group.position);
+        // Reusable NPCs re-arm only after Finn leaves the prompt zone, so we
+        // don't immediately re-trigger while he's still standing next to them.
+        if (n.reusable && !n.armed && d > n.promptDist) n.armed = true;
+        if (dialogueActive) continue;
+        if (n.met && !n.reusable) continue;       // talk-once gate (except reusable)
+        if (n.reusable && !n.armed) continue;     // waiting for player to walk away
+        if (n.when && !n.when()) continue;        // optional extra gating
         if (d < n.promptDist && d < nearestDist) {
           nearestPromptable = n;
           nearestDist = d;
@@ -1719,6 +1800,14 @@
             activeBubbles.splice(i, 1);
           }
         }
+      }
+
+      // Campfire flicker — cheap sine-stacked scale + light intensity pulse.
+      if (campfireFlame) {
+        const ft = performance.now() * 0.005;
+        campfireFlame.scale.y = 0.92 + Math.sin(ft) * 0.08 + Math.sin(ft * 2.7) * 0.04;
+        campfireFlame.scale.x = 0.95 + Math.cos(ft * 1.3) * 0.06;
+        if (campfireLight) campfireLight.intensity = 0.75 + Math.sin(ft * 1.8) * 0.18;
       }
 
       // Wind sway — push current time into all swayable materials' uniforms.
