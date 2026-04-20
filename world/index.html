@@ -52,10 +52,9 @@
       margin-top: 2px;
       opacity: 0.75;
     }
-    #reset-btn {
+    #reset-btn, #view-toggle-btn {
       position: fixed;
       top: env(safe-area-inset-top, 0);
-      right: env(safe-area-inset-right, 0);
       margin: 10px 14px;
       padding: 6px 12px;
       background: rgba(255, 255, 255, 0.82);
@@ -69,7 +68,31 @@
       -webkit-user-select: none;
       user-select: none;
     }
-    #reset-btn:active { background: #f3ead0; }
+    #reset-btn { right: env(safe-area-inset-right, 0); }
+    #view-toggle-btn {
+      right: env(safe-area-inset-right, 0);
+      margin-right: 78px; /* sits to the left of Reset */
+    }
+    #reset-btn:active, #view-toggle-btn:active { background: #f3ead0; }
+
+    .region-label {
+      position: fixed;
+      left: 0;
+      top: 0;
+      transform: translate(-50%, -50%);
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 2px solid #cbb98a;
+      border-radius: 12px;
+      font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #4a4232;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    }
+    .region-label.visible { opacity: 1; }
 
     #npc-prompt {
       position: fixed;
@@ -177,6 +200,7 @@
     <div class="title">World Quest · W3</div>
     <div class="hint"><span id="biome-label"></span> — tap the ground to walk.</div>
   </div>
+  <button id="view-toggle-btn" title="Toggle between walking view and world map">Map</button>
   <button id="reset-btn" title="Clear saved progress and reload">Reset</button>
   <div id="npc-prompt">Walk closer to talk</div>
   <div id="dialogue-panel">
@@ -610,11 +634,25 @@
       resetState();
     });
 
+    // View mode — 'walk' is the default third-person follow; 'world' pulls
+    // the camera up and back for a map-like overview with region labels.
+    let viewMode = 'walk';
+    const WORLD_CAM_POS    = new THREE.Vector3(0, 70, 55);
+    const WORLD_CAM_TARGET = new THREE.Vector3(0, 0, 0);
+
+    const viewToggleBtn = document.getElementById('view-toggle-btn');
+    if (viewToggleBtn) viewToggleBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      viewMode = (viewMode === 'walk') ? 'world' : 'walk';
+      viewToggleBtn.textContent = (viewMode === 'walk') ? 'Map' : 'Walk';
+    });
+
     const container = document.getElementById('app');
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(biome.sky.top);
     scene.fog = new THREE.Fog(biome.fog.color, biome.fog.near, biome.fog.far);
+    const walkFog = scene.fog; // cached so world-view can toggle fog off cleanly
 
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
 
@@ -1711,6 +1749,7 @@
     }
 
     function handleTap(ev) {
+      if (viewMode === 'world') return; // map view is look-only for now
       setPointerFromEvent(ev, pointer);
       raycaster.setFromCamera(pointer, camera);
       const hit = raycaster.intersectObject(ground, false)[0];
@@ -1951,6 +1990,37 @@
         }
       }
 
+      // Region labels — DOM overlays anchored to each region's center. Only
+      // visible in world view. Labels are created lazily so spawned regions
+      // pick up a label automatically on the next tick.
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const tmpRegionProj = new THREE.Vector3();
+      for (const r of regions) {
+        const label = (r.topic && (r.topic.name || r.topic.npcName)) || r.id;
+        if (!r._labelDiv) {
+          const div = document.createElement('div');
+          div.className = 'region-label';
+          div.textContent = label;
+          document.body.appendChild(div);
+          r._labelDiv = div;
+        }
+        if (viewMode !== 'world') {
+          r._labelDiv.classList.remove('visible');
+          continue;
+        }
+        tmpRegionProj.set(r.center.x, heightAt(r.center.x, r.center.z) + 1.5, r.center.z);
+        tmpRegionProj.project(camera);
+        const onScreen = tmpRegionProj.z > -1 && tmpRegionProj.z < 1;
+        if (!onScreen) {
+          r._labelDiv.classList.remove('visible');
+          continue;
+        }
+        r._labelDiv.style.left = ((tmpRegionProj.x * 0.5 + 0.5) * w) + 'px';
+        r._labelDiv.style.top  = ((-tmpRegionProj.y * 0.5 + 0.5) * h) + 'px';
+        r._labelDiv.classList.add('visible');
+      }
+
       // Speech bubbles — project each bubble's anchor point to screen coords
       if (activeBubbles.length) {
         const nowMs = performance.now();
@@ -2005,10 +2075,20 @@
       particles.position.z = finn.position.z;
       particles.rotation.y += dt * 0.04;
 
-      // Camera smoothing — dialogue mode frames Finn + the NPC side-on; normal
-      // mode uses the fixed third-person follow offset.
+      // Camera smoothing — world view overrides everything; dialogue mode
+      // frames Finn + the NPC side-on; walk mode uses the fixed follow offset.
+      // Fog near/far tween between walk values and pulled-back world values
+      // so distant regions don't bleach out but still hold some atmosphere.
       const camK = 1 - Math.pow(0.001, dt);
-      if (dialogueActive && dlgNpcGroup) {
+      const targetNear = (viewMode === 'world') ? 85 : biome.fog.near;
+      const targetFar  = (viewMode === 'world') ? 240 : biome.fog.far;
+      walkFog.near += (targetNear - walkFog.near) * camK;
+      walkFog.far  += (targetFar  - walkFog.far)  * camK;
+      if (viewMode === 'world') {
+        desiredCamPos.copy(WORLD_CAM_POS);
+        camera.position.lerp(desiredCamPos, camK);
+        cameraTarget.lerp(WORLD_CAM_TARGET, camK);
+      } else if (dialogueActive && dlgNpcGroup) {
         const midX = (finn.position.x + dlgNpcGroup.position.x) * 0.5;
         const midZ = (finn.position.z + dlgNpcGroup.position.z) * 0.5;
         const dx = dlgNpcGroup.position.x - finn.position.x;
