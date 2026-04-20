@@ -337,6 +337,23 @@
     }
     const savedState = loadSavedState();
 
+    // Chunk registry (W4d) — the world is a collection of chunks, each a
+    // square patch of terrain with its own mesh, offset, and contained
+    // regions. In W4d-1 there's just chunk 0 (the starting prairie), but
+    // every world-coord lookup routes through findChunkAt so spawning
+    // additional chunks in W4d-2+ only needs to push new entries here.
+    const chunks = [];
+    function findChunkAt(x, z) {
+      for (let i = 0; i < chunks.length; i++) {
+        const c = chunks[i];
+        const dx = x - c.offset.x;
+        const dz = z - c.offset.z;
+        const half = c.size / 2;
+        if (dx >= -half && dx <= half && dz >= -half && dz <= half) return c;
+      }
+      return null;
+    }
+
     // Region registry — one entry per placed region. Each region references
     // a template for its terrain + content build logic, plus a center and a
     // params bag the template reads. Populated synchronously before the
@@ -367,6 +384,8 @@
     const WALK_BLOCK_DEPTH = 0.5;
 
     function isBlocked(x, z) {
+      // Outside any chunk → impassable (W4d gap between chunks / beyond world).
+      if (!findChunkAt(x, z)) return true;
       let deepest = 0;
       for (let i = 0; i < regions.length; i++) {
         const r = regions[i];
@@ -875,6 +894,21 @@
     const TERRAIN_SIZE = 180;
     const TERRAIN_SEGMENTS = 140;
     const TERRAIN_BOUND = TERRAIN_SIZE / 2 - 5;
+
+    // Register the starting prairie as chunk 0 (the "home" chunk). Mesh +
+    // geometry refs get filled in below once they exist.
+    const chunk0 = {
+      id: 'home',
+      offset: { x: 0, z: 0 },
+      size: TERRAIN_SIZE,
+      segments: TERRAIN_SEGMENTS,
+      halfSize: TERRAIN_SIZE / 2,
+      geometry: null,
+      mesh: null,
+      biome,
+    };
+    chunks.push(chunk0);
+
     const groundGeo = new THREE.PlaneGeometry(
       TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS
     );
@@ -1070,6 +1104,8 @@
     );
     ground.receiveShadow = true;
     scene.add(ground);
+    chunk0.geometry = groundGeo;
+    chunk0.mesh = ground;
 
     // Wind sway — height-weighted vertex displacement injected into existing
     // MeshLambert/MeshStandard materials via onBeforeCompile. Bottom vertices
