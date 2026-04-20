@@ -129,6 +129,27 @@
       text-align: right;
     }
     #dialogue-hint.hidden { visibility: hidden; }
+
+    .speech-bubble {
+      position: fixed;
+      left: 0;
+      top: 0;
+      transform: translate(-50%, -100%);
+      padding: 8px 14px;
+      background: #fff;
+      border: 2px solid #cbb98a;
+      border-radius: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: #2c2a26;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      white-space: nowrap;
+    }
+    .speech-bubble.visible { opacity: 1; }
   </style>
 </head>
 <body>
@@ -227,15 +248,38 @@
     const rng = makeSeededRandom(42);
     const noise2D = createNoise2D(rng);
 
-    // Height function driven by the active biome's octave list.
+    // Height function driven by the active biome's octave list, minus a
+    // ravine the Bridge Keeper's bridge actually spans.
     const heightOctaves = biome.height.octaves;
+
+    // Ravine — parabolic trough running along X at z=RAVINE_Z. Full depth
+    // near x=RAVINE_X; tapers smoothly to 0 past RAVINE_TAPER.
+    const RAVINE_Z     = -8;
+    const RAVINE_X     = 14;
+    const RAVINE_DEPTH = 3.8;
+    const RAVINE_WIDTH = 2.8;
+    const RAVINE_CORE  = 10;
+    const RAVINE_TAPER = 26;
+    function ravineDepth(x, z) {
+      const dz = z - RAVINE_Z;
+      const across = 1 - (dz * dz) / (RAVINE_WIDTH * RAVINE_WIDTH);
+      if (across <= 0) return 0;
+      const dx = Math.abs(x - RAVINE_X);
+      let along = 1;
+      if (dx > RAVINE_CORE) {
+        const t = Math.max(0, (RAVINE_TAPER - dx) / (RAVINE_TAPER - RAVINE_CORE));
+        along = t * t * (3 - 2 * t);
+      }
+      return across * along * RAVINE_DEPTH;
+    }
+
     function heightAt(x, z) {
       let h = 0;
       for (let i = 0; i < heightOctaves.length; i++) {
         const [freq, amp] = heightOctaves[i];
         h += noise2D(x * freq, z * freq) * amp;
       }
-      return h;
+      return h - ravineDepth(x, z);
     }
 
     const container = document.getElementById('app');
@@ -575,7 +619,43 @@
     const flags = {
       metBridgeKeeper: false,
       puzzleSolved:    false,
+      climaxStarted:   false,
+      bridgeRebuilt:   false,
     };
+
+    // W2c climax plumbing — plank tweens + floating speech bubbles + a hook the
+    // async loader assigns once scatteredPlanks/plankFinalPositions exist.
+    const plankTweens   = [];
+    const activeBubbles = [];
+    let triggerClimax   = null;
+
+    function showBubble(targetGroup, text, durationMs = 2000, yOffset = 2.0) {
+      const div = document.createElement('div');
+      div.className = 'speech-bubble';
+      div.textContent = text;
+      document.body.appendChild(div);
+      requestAnimationFrame(() => div.classList.add('visible'));
+      activeBubbles.push({
+        target: targetGroup, yOffset, div,
+        expireAt: performance.now() + durationMs,
+      });
+    }
+
+    // Play a one-shot animation action on a companion, fading the current
+    // idle/walk out and fading back in automatically when the clip finishes.
+    function playCompanionOneShot(comp, oneShot) {
+      if (!comp || !oneShot) return;
+      if (comp.current) comp.current.fadeOut(0.15);
+      oneShot.reset().fadeIn(0.15).play();
+      comp.current = oneShot;
+      const handler = (e) => {
+        if (e.action !== oneShot) return;
+        comp.mixer.removeEventListener('finished', handler);
+        oneShot.fadeOut(0.25);
+        comp.current = null; // companion tick will fade idle/walk back in
+      };
+      comp.mixer.addEventListener('finished', handler);
+    }
 
     // NPC registry — Finn checks proximity each tick and auto-triggers the
     // attached dialogue script when stopped close to one (and conditions pass).
@@ -658,6 +738,10 @@
       dlgNpcGroup = null;
       dlgUI.panel.classList.remove('visible');
       flags.metBridgeKeeper = true;
+      if (flags.puzzleSolved && !flags.climaxStarted && triggerClimax) {
+        flags.climaxStarted = true;
+        triggerClimax();
+      }
     }
 
     // Bridge Keeper script — Whispering Woods port. W2a intro + W2b counting
@@ -716,13 +800,16 @@
       groupTarget.add(model);
 
       const m = new THREE.AnimationMixer(model);
-      const idleClip = pickClip(glb.animations, ['unarmed_idle', 'idle']);
-      const walkClip = pickClip(glb.animations, ['walking_a', 'walking', 'walk']);
-      const idle = idleClip ? m.clipAction(idleClip) : null;
-      const walk = walkClip ? m.clipAction(walkClip) : null;
+      const idleClip  = pickClip(glb.animations, ['unarmed_idle', 'idle']);
+      const walkClip  = pickClip(glb.animations, ['walking_a', 'walking', 'walk']);
+      const cheerClip = pickClip(glb.animations, ['cheer']);
+      const idle  = idleClip  ? m.clipAction(idleClip)  : null;
+      const walk  = walkClip  ? m.clipAction(walkClip)  : null;
+      const cheer = cheerClip ? m.clipAction(cheerClip) : null;
       if (walk) walk.timeScale = 1.4;
+      if (cheer) { cheer.loop = THREE.LoopOnce; cheer.clampWhenFinished = true; }
       if (idle) idle.play();
-      return { mixer: m, idle, walk };
+      return { mixer: m, idle, walk, cheer };
     }
 
     (async () => {
@@ -758,27 +845,35 @@
       const pipMixer = new THREE.AnimationMixer(pipScene);
       const pipIdleClip = pickClip(frogGlb.animations, ['idle']);
       const pipWalkClip = pickClip(frogGlb.animations, ['walk', 'jump', 'hop']);
+      const pipJumpClip = pickClip(frogGlb.animations, ['jump']);
       const pipIdle = pipIdleClip ? pipMixer.clipAction(pipIdleClip) : null;
       const pipWalk = pipWalkClip ? pipMixer.clipAction(pipWalkClip) : null;
+      const pipJump = pipJumpClip ? pipMixer.clipAction(pipJumpClip) : null;
       if (pipWalk) pipWalk.timeScale = 1.4;
+      if (pipJump) { pipJump.loop = THREE.LoopOnce; pipJump.clampWhenFinished = true; }
       if (pipIdle) pipIdle.play();
 
       companions.push(
         {
+          id: 'wren',
           group: wren, mixer: wrenSetup.mixer,
-          idle: wrenSetup.idle, walk: wrenSetup.walk, current: wrenSetup.idle,
+          idle: wrenSetup.idle, walk: wrenSetup.walk, cheer: wrenSetup.cheer,
+          current: wrenSetup.idle,
           offset: new THREE.Vector3(-1.7, 0, -1.4),
         },
         {
+          id: 'pip',
           group: pip, mixer: pipMixer,
-          idle: pipIdle, walk: pipWalk, current: pipIdle,
+          idle: pipIdle, walk: pipWalk, cheer: pipJump,
+          current: pipIdle,
           offset: new THREE.Vector3(1.2, 0, -0.9),
         },
       );
 
-      // Bridge Keeper (Knight) — fixed-position NPC for the W2a dialogue test
+      // Bridge Keeper (Knight) — stands on the north bank of the ravine so
+      // Finn approaches him, talks, then uses the bridge he'll help build.
       const bridgeKeeper = new THREE.Group();
-      const bkPos = { x: 10, z: -8 };
+      const bkPos = { x: 12, z: -3.5 };
       bridgeKeeper.position.set(bkPos.x, heightAt(bkPos.x, bkPos.z), bkPos.z);
       // Face roughly toward origin so he greets Finn coming from spawn
       bridgeKeeper.rotation.y = Math.atan2(-bkPos.x, -bkPos.z);
@@ -794,14 +889,43 @@
         when: () => !flags.metBridgeKeeper,
       });
 
-      // Six plank primitives around the Bridge Keeper — flat wooden boards so
-      // they read clearly as "planks" rather than logs. Deterministic rng
-      // placement ensures the count is reliably six on every load.
+      // Visible bridge structure spanning the ravine — a tall stone pier on
+      // each bank. Each pier is anchored to the terrain at its OWN Z so the
+      // bridge deck reads as a level span over the trough below.
+      const BRIDGE_CENTER = { x: RAVINE_X, z: RAVINE_Z };
+      const BRIDGE_SPAN   = 5;
+      const PIER_HEIGHT   = 0.7;
+      const pierAZ = BRIDGE_CENTER.z - BRIDGE_SPAN / 2 - 0.4;
+      const pierBZ = BRIDGE_CENTER.z + BRIDGE_SPAN / 2 + 0.4;
+      const pierAGround = heightAt(BRIDGE_CENTER.x, pierAZ);
+      const pierBGround = heightAt(BRIDGE_CENTER.x, pierBZ);
+      const stoneMat = new THREE.MeshLambertMaterial({ color: 0x8e867a });
+      const pierGeo  = new THREE.BoxGeometry(1.8, PIER_HEIGHT, 1.2);
+      const pierA = new THREE.Mesh(pierGeo, stoneMat);
+      pierA.position.set(BRIDGE_CENTER.x, pierAGround + PIER_HEIGHT / 2, pierAZ);
+      pierA.castShadow = true;
+      pierA.receiveShadow = true;
+      scene.add(pierA);
+      const pierB = new THREE.Mesh(pierGeo, stoneMat);
+      pierB.position.set(BRIDGE_CENTER.x, pierBGround + PIER_HEIGHT / 2, pierBZ);
+      pierB.castShadow = true;
+      pierB.receiveShadow = true;
+      scene.add(pierB);
+      // Deck sits on top of the higher pier so both pier tops touch the planks.
+      const PLANK_FINAL_Y = Math.max(pierAGround, pierBGround) + PIER_HEIGHT + 0.08;
+
+      // Six plank primitives scattered on the Bridge Keeper's side (north of
+      // the ravine). Kept in an array so the W2c climax can tween each plank
+      // into its final bridge position.
       const plankGeo = new THREE.BoxGeometry(1.6, 0.16, 0.5);
       const plankMat = new THREE.MeshLambertMaterial({ color: 0x9c6a3a });
+      const scatteredPlanks = [];
+      const plankFinalPositions = [];
       for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2 + (rng() - 0.5) * 0.5;
-        const dist  = 2.6 + rng() * 2.6;
+        // North semicircle only — angles 0..π put sin(angle) >= 0, so pz > bkPos.z
+        // and planks stay out of the ravine.
+        const angle = (i / 6) * Math.PI + (rng() - 0.5) * 0.25;
+        const dist  = 2.6 + rng() * 2.8;
         const px = bkPos.x + Math.cos(angle) * dist;
         const pz = bkPos.z + Math.sin(angle) * dist;
         const plank = new THREE.Mesh(plankGeo, plankMat);
@@ -809,9 +933,53 @@
         plank.receiveShadow = true;
         plank.position.set(px, heightAt(px, pz) + 0.08, pz);
         plank.rotation.y = rng() * Math.PI * 2;
-        plank.rotation.z = (rng() - 0.5) * 0.15; // slight random tilt
+        plank.rotation.z = (rng() - 0.5) * 0.15;
         scene.add(plank);
+        scatteredPlanks.push(plank);
+
+        // Final position along the bridge gap (evenly spaced along Z).
+        const t = (i + 0.5) / 6;
+        const finalZ = BRIDGE_CENTER.z - BRIDGE_SPAN / 2 + t * BRIDGE_SPAN;
+        plankFinalPositions.push(new THREE.Vector3(BRIDGE_CENTER.x, PLANK_FINAL_Y, finalZ));
       }
+
+      // W2c climax timeline — four beats chained with setTimeout. Each beat
+      // reaches into the scatter / companion state captured in this closure.
+      triggerClimax = function () {
+        // Beat 2 — Pip reacts (0.3s): one-shot jump + speech bubble
+        setTimeout(() => {
+          const pipC = companions.find((c) => c.id === 'pip');
+          if (pipC) playCompanionOneShot(pipC, pipC.cheer);
+          showBubble(pip, 'Ribbit!', 1800, 1.1);
+        }, 300);
+
+        // Beat 3 — World change (1.3s): planks arc into the bridge gap, staggered
+        setTimeout(() => {
+          const now = performance.now();
+          for (let i = 0; i < scatteredPlanks.length; i++) {
+            const p = scatteredPlanks[i];
+            plankTweens.push({
+              plank: p,
+              from:     p.position.clone(),
+              fromRotY: p.rotation.y,
+              fromRotZ: p.rotation.z,
+              to:       plankFinalPositions[i],
+              toRotY:   0,
+              toRotZ:   0,
+              startTime: now + i * 140,
+              duration:  950,
+            });
+          }
+        }, 1300);
+
+        // Beat 4 — Wren cheers (3.9s): cheer anim + speech bubble; world settles
+        setTimeout(() => {
+          const wrenC = companions.find((c) => c.id === 'wren');
+          if (wrenC) playCompanionOneShot(wrenC, wrenC.cheer);
+          showBubble(wren, 'You did it!', 2400, 2.0);
+          flags.bridgeRebuilt = true;
+        }, 3900);
+      };
       // Snap companions to their start offsets so they don't slide in from origin
       const startOffset = new THREE.Vector3();
       for (const c of companions) {
@@ -1115,6 +1283,49 @@
       // Sun / shadow camera tracks Finn so shadows stay crisp anywhere in the world
       sun.target.position.copy(finn.position);
       sun.position.copy(finn.position).add(SUN_OFFSET);
+
+      // Plank tweens — arc each scattered plank into its bridge position.
+      if (plankTweens.length) {
+        const nowT = performance.now();
+        for (let i = plankTweens.length - 1; i >= 0; i--) {
+          const tw = plankTweens[i];
+          const elapsed = nowT - tw.startTime;
+          if (elapsed < 0) continue;
+          const u = Math.min(1, elapsed / tw.duration);
+          const e = 1 - Math.pow(1 - u, 3); // ease-out cubic
+          tw.plank.position.lerpVectors(tw.from, tw.to, e);
+          tw.plank.position.y += Math.sin(u * Math.PI) * 1.8; // arc up mid-flight
+          tw.plank.rotation.y = tw.fromRotY + (tw.toRotY - tw.fromRotY) * e;
+          tw.plank.rotation.z = tw.fromRotZ + (tw.toRotZ - tw.fromRotZ) * e;
+          if (u >= 1) plankTweens.splice(i, 1);
+        }
+      }
+
+      // Speech bubbles — project each bubble's anchor point to screen coords
+      if (activeBubbles.length) {
+        const nowMs = performance.now();
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const tmpProj = new THREE.Vector3();
+        for (let i = activeBubbles.length - 1; i >= 0; i--) {
+          const b = activeBubbles[i];
+          tmpProj.copy(b.target.position);
+          tmpProj.y += b.yOffset;
+          tmpProj.project(camera);
+          const onScreen = tmpProj.z < 1 && tmpProj.z > -1;
+          b.div.style.display = onScreen ? 'block' : 'none';
+          if (onScreen) {
+            b.div.style.left = ((tmpProj.x * 0.5 + 0.5) * w) + 'px';
+            b.div.style.top  = ((-tmpProj.y * 0.5 + 0.5) * h) + 'px';
+          }
+          if (nowMs > b.expireAt) {
+            b.div.classList.remove('visible');
+            const div = b.div;
+            setTimeout(() => div.remove(), 300);
+            activeBubbles.splice(i, 1);
+          }
+        }
+      }
 
       // Wind sway — push current time into all swayable materials' uniforms.
       const swayT = performance.now() * 0.001;
