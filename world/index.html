@@ -354,6 +354,54 @@
       return null;
     }
 
+    // Build a chunk's terrain mesh + vertex colors in place. The chunk's
+    // mesh is positioned at chunk.offset so local vertex coords map to
+    // world coords via mesh.position. Each chunk caches its geometry,
+    // mesh, color buffer, and palette refs so rise tweens and color
+    // updates can operate on any chunk (currently just chunk 0 in W4d-2).
+    function buildChunkMesh(chunk) {
+      const biomeCfg = chunk.biome;
+      const geo = new THREE.PlaneGeometry(chunk.size, chunk.size, chunk.segments, chunk.segments);
+      geo.rotateX(-Math.PI / 2);
+      const pos = geo.attributes.position;
+      const colors = new Float32Array(pos.count * 3);
+      const lowC  = new THREE.Color(biomeCfg.ground.low);
+      const midC  = new THREE.Color(biomeCfg.ground.mid);
+      const highC = new THREE.Color(biomeCfg.ground.high);
+      const tmpC  = new THREE.Color();
+      const [spanLo, spanHi] = biomeCfg.ground.span;
+      const spanRange = spanHi - spanLo;
+
+      for (let i = 0; i < pos.count; i++) {
+        const localX = pos.getX(i);
+        const localZ = pos.getZ(i);
+        const wx = localX + chunk.offset.x;
+        const wz = localZ + chunk.offset.z;
+        const h = heightAt(wx, wz);
+        pos.setY(i, h);
+        const t = THREE.MathUtils.clamp((h - spanLo) / spanRange, 0, 1);
+        if (t < 0.5) tmpC.copy(lowC).lerp(midC, t * 2);
+        else         tmpC.copy(midC).lerp(highC, (t - 0.5) * 2);
+        const jitter = (rng() - 0.5) * biomeCfg.ground.jitter;
+        colors[i * 3    ] = THREE.MathUtils.clamp(tmpC.r + jitter, 0, 1);
+        colors[i * 3 + 1] = THREE.MathUtils.clamp(tmpC.g + jitter, 0, 1);
+        colors[i * 3 + 2] = THREE.MathUtils.clamp(tmpC.b + jitter, 0, 1);
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.computeVertexNormals();
+
+      const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+      mesh.position.set(chunk.offset.x, 0, chunk.offset.z);
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+
+      chunk.geometry     = geo;
+      chunk.mesh         = mesh;
+      chunk.groundColors = colors;
+      chunk.palette      = { lowC, midC, highC, tmpC, spanLo, spanRange, jitter: biomeCfg.ground.jitter };
+      return chunk;
+    }
+
     // Region registry — one entry per placed region. Each region references
     // a template for its terrain + content build logic, plus a center and a
     // params bag the template reads. Populated synchronously before the
@@ -909,33 +957,19 @@
     };
     chunks.push(chunk0);
 
-    const groundGeo = new THREE.PlaneGeometry(
-      TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS
-    );
-    groundGeo.rotateX(-Math.PI / 2); // lay flat, normal +Y
-
-    const groundPos = groundGeo.attributes.position;
-    const groundColors = new Float32Array(groundPos.count * 3);
-    const lowC  = new THREE.Color(biome.ground.low);
-    const midC  = new THREE.Color(biome.ground.mid);
-    const highC = new THREE.Color(biome.ground.high);
-    const tmpC  = new THREE.Color();
-    const [spanLo, spanHi] = biome.ground.span;
-    const spanRange = spanHi - spanLo;
-    for (let i = 0; i < groundPos.count; i++) {
-      const wx = groundPos.getX(i);
-      const wz = groundPos.getZ(i);
-      const h = heightAt(wx, wz);
-      groundPos.setY(i, h);
-      const t = THREE.MathUtils.clamp((h - spanLo) / spanRange, 0, 1);
-      if (t < 0.5) tmpC.copy(lowC).lerp(midC, t * 2);
-      else         tmpC.copy(midC).lerp(highC, (t - 0.5) * 2);
-      const jitter = (rng() - 0.5) * biome.ground.jitter;
-      groundColors[i * 3    ] = THREE.MathUtils.clamp(tmpC.r + jitter, 0, 1);
-      groundColors[i * 3 + 1] = THREE.MathUtils.clamp(tmpC.g + jitter, 0, 1);
-      groundColors[i * 3 + 2] = THREE.MathUtils.clamp(tmpC.b + jitter, 0, 1);
-    }
-    groundGeo.setAttribute('color', new THREE.BufferAttribute(groundColors, 3));
+    // Build chunk 0's mesh. Aliases below keep existing code that references
+    // these by their historic names (groundGeo / groundColors / palette vars)
+    // working. buildChunkMesh can now be called for any chunk — that's how
+    // W4d-3 will stand up new chunks on a topic spawn.
+    buildChunkMesh(chunk0);
+    const groundGeo    = chunk0.geometry;
+    const groundColors = chunk0.groundColors;
+    const lowC         = chunk0.palette.lowC;
+    const midC         = chunk0.palette.midC;
+    const highC        = chunk0.palette.highC;
+    const tmpC         = chunk0.palette.tmpC;
+    const spanLo       = chunk0.palette.spanLo;
+    const spanRange    = chunk0.palette.spanRange;
 
     // ---- Topic-driven region spawning (W4 polish: Option C) ----
     // spawnRegion(topic) — unified entry point for every asked question.
@@ -1097,15 +1131,10 @@
       });
       saveState();
     }
-    groundGeo.computeVertexNormals();
-    const ground = new THREE.Mesh(
-      groundGeo,
-      new THREE.MeshLambertMaterial({ vertexColors: true })
-    );
-    ground.receiveShadow = true;
-    scene.add(ground);
-    chunk0.geometry = groundGeo;
-    chunk0.mesh = ground;
+    // buildChunkMesh already created the mesh, set shadows, and added it to
+    // the scene. This alias keeps the old `ground` reference available for
+    // the tap-to-move raycast.
+    const ground = chunk0.mesh;
 
     // Wind sway — height-weighted vertex displacement injected into existing
     // MeshLambert/MeshStandard materials via onBeforeCompile. Bottom vertices
