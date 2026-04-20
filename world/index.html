@@ -52,6 +52,25 @@
       margin-top: 2px;
       opacity: 0.75;
     }
+    #reset-btn {
+      position: fixed;
+      top: env(safe-area-inset-top, 0);
+      right: env(safe-area-inset-right, 0);
+      margin: 10px 14px;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid #b8ac8a;
+      border-radius: 10px;
+      font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #4a4232;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #reset-btn:active { background: #f3ead0; }
+
     #npc-prompt {
       position: fixed;
       left: 50%;
@@ -155,9 +174,10 @@
 <body>
   <div id="app"></div>
   <div id="hud">
-    <div class="title">World Quest · W2a</div>
+    <div class="title">World Quest · W3</div>
     <div class="hint"><span id="biome-label"></span> — tap the ground to walk.</div>
   </div>
+  <button id="reset-btn" title="Clear saved progress and reload">Reset</button>
   <div id="npc-prompt">Walk closer to talk</div>
   <div id="dialogue-panel">
     <div id="dialogue-speaker"></div>
@@ -514,6 +534,54 @@
         src.stop(now + 0.1);
       },
     };
+
+    // Save / resume via localStorage. A single-object schema keyed by
+    // SAVE_KEY; version bumps invalidate old saves.
+    const SAVE_KEY = 'world-quest-save-v1';
+    const SAVE_VERSION = 1;
+
+    function loadSavedState() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (!data || data.version !== SAVE_VERSION) return null;
+        return data;
+      } catch (e) {
+        return null;
+      }
+    }
+    const savedState = loadSavedState();
+
+    function saveState() {
+      try {
+        const data = {
+          version: SAVE_VERSION,
+          finn: {
+            x: finn.position.x,
+            y: finn.position.y,
+            z: finn.position.z,
+            facing: facing,
+          },
+          flags: { ...flags },
+          npcs: npcs.map((n) => ({ id: n.id, met: !!n.met })),
+        };
+        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      } catch (e) {
+        // Quota / private-mode / etc. — silently ignore; the game still plays.
+      }
+    }
+
+    function resetState() {
+      try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+      location.reload();
+    }
+
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) resetBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      resetState();
+    });
 
     const container = document.getElementById('app');
 
@@ -981,6 +1049,7 @@
         flags.climaxStarted = true;
         triggerClimax();
       }
+      saveState();
     }
 
     // Bridge Keeper script — Whispering Woods port. W2a intro + W2b counting
@@ -1112,9 +1181,10 @@
       // Attach the CROSSING template's content builder now that we have all
       // the loader-local state it needs (GLBs, mixers, finn/pip/wren refs).
       // This closure is called once per registered region below.
-      TEMPLATE_CROSSING.build = function (region) {
+      TEMPLATE_CROSSING.build = function (region, saved) {
         const cx = region.center.x;
         const cz = region.center.z;
+        const bridgeAlreadyBuilt = !!(saved && saved.flags && saved.flags.bridgeRebuilt);
 
         // NPC — Bridge Keeper (Knight). Stands on the north bank.
         const bridgeKeeper = new THREE.Group();
@@ -1176,6 +1246,17 @@
           plankFinalPositions.push(new THREE.Vector3(cx, PLANK_FINAL_Y, finalZ));
         }
 
+        // Resuming a saved world where the bridge was already rebuilt — snap
+        // the planks to their final positions and skip the climax trigger.
+        if (bridgeAlreadyBuilt) {
+          for (let i = 0; i < scatteredPlanks.length; i++) {
+            const p = scatteredPlanks[i];
+            p.position.copy(plankFinalPositions[i]);
+            p.rotation.y = 0;
+            p.rotation.z = 0;
+          }
+        }
+
         // W2c climax — four beats. Closure captures scatteredPlanks, pip, wren.
         triggerClimax = function () {
           setTimeout(() => {
@@ -1208,13 +1289,14 @@
             if (wrenC) playCompanionOneShot(wrenC, wrenC.cheer);
             showBubble(wren, 'You did it!', 2400, 2.0);
             flags.bridgeRebuilt = true;
+            saveState();
           }, 3900);
         };
       };
 
       // LOOKOUT template's content builder — a single NPC at the hilltop with
       // a short, no-puzzle flavor dialogue from region.topic.lines.
-      TEMPLATE_LOOKOUT.build = function (region) {
+      TEMPLATE_LOOKOUT.build = function (region, _saved) {
         const cx = region.center.x;
         const cz = region.center.z;
         const npcName = (region.topic && region.topic.npcName) || 'Wanderer';
@@ -1243,8 +1325,25 @@
 
       // Build each registered region's content.
       for (const r of regions) {
-        if (r.template && r.template.build) r.template.build(r);
+        if (r.template && r.template.build) r.template.build(r, savedState);
       }
+
+      // Apply saved world state now that NPCs exist: Finn position + facing,
+      // flags bag, per-NPC met. Skipped cleanly on first launch.
+      if (savedState) {
+        const sx = THREE.MathUtils.clamp(savedState.finn.x, -TERRAIN_BOUND, TERRAIN_BOUND);
+        const sz = THREE.MathUtils.clamp(savedState.finn.z, -TERRAIN_BOUND, TERRAIN_BOUND);
+        finn.position.set(sx, heightAt(sx, sz), sz);
+        facing = savedState.finn.facing || 0;
+        finn.rotation.y = facing;
+        Object.assign(flags, savedState.flags || {});
+        for (const s of savedState.npcs || []) {
+          const npc = npcs.find((n) => n.id === s.id);
+          if (npc) npc.met = !!s.met;
+        }
+        placeCameraInstant(); // snap camera so it doesn't sweep in
+      }
+
       // Snap companions to their start offsets so they don't slide in from origin
       const startOffset = new THREE.Vector3();
       for (const c of companions) {
@@ -1362,6 +1461,7 @@
     let facing = 0;
     let walkPhase = 0;
     let lastFootstep = 0; // perf time of last footstep SFX
+    let lastSave = 0;     // perf time of last periodic save
 
     // Camera rig — third-person follow
     const cameraOffset = new THREE.Vector3(0, 6, 9);
@@ -1485,6 +1585,11 @@
           if (nowMs - lastFootstep > 380) {
             audio.footstep();
             lastFootstep = nowMs;
+          }
+          // Periodic save so position persists without spamming localStorage
+          if (nowMs - lastSave > 2000) {
+            saveState();
+            lastSave = nowMs;
           }
 
           // Smooth facing
