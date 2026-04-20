@@ -52,13 +52,97 @@
       margin-top: 2px;
       opacity: 0.75;
     }
+    #npc-prompt {
+      position: fixed;
+      left: 50%;
+      bottom: 22%;
+      transform: translateX(-50%);
+      padding: 8px 14px;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: #2c3e1f;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+    #npc-prompt.visible { opacity: 1; }
+
+    #dialogue-panel {
+      position: fixed;
+      left: env(safe-area-inset-left, 0);
+      right: env(safe-area-inset-right, 0);
+      bottom: env(safe-area-inset-bottom, 0);
+      padding: 18px 20px 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.98));
+      border-top: 3px solid #cbb98a;
+      box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.18);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #2c2a26;
+      max-height: 45vh;
+      overflow: hidden;
+      display: none;
+    }
+    #dialogue-panel.visible { display: block; }
+    #dialogue-speaker {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #6b5a32;
+      margin-bottom: 6px;
+    }
+    #dialogue-text {
+      font-size: 22px;
+      line-height: 1.35;
+      min-height: 64px;
+    }
+    #dialogue-choices {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    #dialogue-choices button {
+      flex: 1 1 200px;
+      min-height: 56px;
+      padding: 10px 18px;
+      font-size: 18px;
+      font-weight: 600;
+      color: #2c2a26;
+      background: #ffe9a8;
+      border: 2px solid #c79c3a;
+      border-radius: 14px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #dialogue-choices button:active {
+      background: #ffd96b;
+      transform: translateY(1px);
+    }
+    #dialogue-hint {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #8a7d5a;
+      text-align: right;
+    }
+    #dialogue-hint.hidden { visibility: hidden; }
   </style>
 </head>
 <body>
   <div id="app"></div>
   <div id="hud">
-    <div class="title">World Quest · W1c</div>
+    <div class="title">World Quest · W2a</div>
     <div class="hint"><span id="biome-label"></span> — tap the ground to walk.</div>
+  </div>
+  <div id="npc-prompt">Walk closer to talk</div>
+  <div id="dialogue-panel">
+    <div id="dialogue-speaker"></div>
+    <div id="dialogue-text"></div>
+    <div id="dialogue-choices"></div>
+    <div id="dialogue-hint">Tap to continue</div>
   </div>
 
   <script type="importmap">
@@ -486,6 +570,95 @@
     let companionsReady = false;
     const UP = new THREE.Vector3(0, 1, 0);
 
+    // Region-scoped flag bag (state that lives across re-entry to a region but
+    // not across page reloads). W2 grows this with puzzleSolved, etc.
+    const flags = {
+      metBridgeKeeper: false,
+    };
+
+    // NPC registry — Finn checks proximity each tick and auto-triggers the
+    // attached dialogue script when stopped close to one (and conditions pass).
+    const npcs = [];
+
+    // Dialogue overlay
+    const dlgUI = {
+      panel:    document.getElementById('dialogue-panel'),
+      speaker:  document.getElementById('dialogue-speaker'),
+      text:     document.getElementById('dialogue-text'),
+      choices:  document.getElementById('dialogue-choices'),
+      hint:     document.getElementById('dialogue-hint'),
+      prompt:   document.getElementById('npc-prompt'),
+    };
+    let dialogueActive = false;
+    let dlgScript = null;
+    let dlgIndex = 0;
+
+    function startDialogue(script) {
+      dlgScript = script;
+      dlgIndex = 0;
+      dialogueActive = true;
+      dlgUI.panel.classList.add('visible');
+      dlgUI.prompt.classList.remove('visible');
+      // Cancel any in-progress walk so Finn settles in front of the NPC
+      moving = false;
+      marker.visible = false;
+      showDialogueNode();
+    }
+    function showDialogueNode() {
+      const node = dlgScript[dlgIndex];
+      dlgUI.speaker.textContent = node.speaker;
+      dlgUI.text.textContent    = node.text;
+      dlgUI.choices.innerHTML   = '';
+      if (node.choices && node.choices.length) {
+        dlgUI.hint.classList.add('hidden');
+        for (const choice of node.choices) {
+          const btn = document.createElement('button');
+          btn.textContent = choice.text;
+          btn.addEventListener('click', () => {
+            const idx = dlgScript.findIndex((n) => n.id === choice.goto);
+            if (idx >= 0) { dlgIndex = idx; showDialogueNode(); }
+            else          { endDialogue(); }
+          });
+          dlgUI.choices.appendChild(btn);
+        }
+      } else {
+        dlgUI.hint.classList.remove('hidden');
+      }
+    }
+    function advanceDialogue() {
+      if (!dialogueActive) return;
+      const node = dlgScript[dlgIndex];
+      if (node.choices && node.choices.length) return; // wait for choice click
+      if (node.end) { endDialogue(); return; }
+      dlgIndex++;
+      if (dlgIndex >= dlgScript.length) endDialogue();
+      else                              showDialogueNode();
+    }
+    function endDialogue() {
+      dialogueActive = false;
+      dlgScript = null;
+      dlgUI.panel.classList.remove('visible');
+      flags.metBridgeKeeper = true;
+    }
+
+    // Bridge Keeper script — first beat of the Whispering Woods port (W2a).
+    // The puzzle and four-beat climax come in W2b and W2c.
+    const BRIDGE_KEEPER_SCRIPT = [
+      { speaker: 'Bridge Keeper', text: 'Halt, traveler!' },
+      { speaker: 'Bridge Keeper', text: "My bridge is broken — the planks are scattered everywhere." },
+      { speaker: 'Wren',          text: "Maybe we can help fix it?" },
+      {
+        speaker: 'Bridge Keeper',
+        text:    'Could you count the planks for me?',
+        choices: [
+          { text: "Yes, we'll help!", goto: 'accept' },
+          { text: 'Maybe later.',     goto: 'decline' },
+        ],
+      },
+      { id: 'accept',  speaker: 'Bridge Keeper', text: 'Wonderful! Look around — count what you see.', end: true },
+      { id: 'decline', speaker: 'Bridge Keeper', text: 'Come back any time, kind traveler.',           end: true },
+    ];
+
     // KayKit characters hold equipment as named child meshes. Hide them so the
     // chibi adventurers read as generic kids for a K-2 audience.
     const WEAPON_KEYWORDS = [
@@ -521,11 +694,12 @@
     }
 
     (async () => {
-      // Load Finn, Wren, and Pip GLBs in parallel
-      const [finnGlb, wrenGlb, frogGlb] = await Promise.all([
+      // Load Finn, Wren, Pip, and the Bridge Keeper (Knight) in parallel
+      const [finnGlb, wrenGlb, frogGlb, knightGlb] = await Promise.all([
         loadGLB('./assets/finn.glb'),
         loadGLB('./assets/wren.glb'),
         loadGLB('./assets/frog.glb'),
+        loadGLB('./assets/knight.glb'),
       ]);
 
       // Finn — KayKit Rogue_Hooded
@@ -568,6 +742,24 @@
           offset: new THREE.Vector3(1.2, 0, -0.9),
         },
       );
+
+      // Bridge Keeper (Knight) — fixed-position NPC for the W2a dialogue test
+      const bridgeKeeper = new THREE.Group();
+      const bkPos = { x: 10, z: -8 };
+      bridgeKeeper.position.set(bkPos.x, heightAt(bkPos.x, bkPos.z), bkPos.z);
+      // Face roughly toward origin so he greets Finn coming from spawn
+      bridgeKeeper.rotation.y = Math.atan2(-bkPos.x, -bkPos.z);
+      scene.add(bridgeKeeper);
+      const bkSetup = setupKayKitChar(knightGlb, bridgeKeeper, null, 1.0);
+      npcs.push({
+        id: 'bridgeKeeper',
+        group: bridgeKeeper,
+        mixer: bkSetup.mixer,
+        triggerDist: 3.5,        // auto-trigger when Finn stops within this
+        promptDist: 6.0,         // show "walk closer" prompt within this
+        script: BRIDGE_KEEPER_SCRIPT,
+        when: () => !flags.metBridgeKeeper,
+      });
       // Snap companions to their start offsets so they don't slide in from origin
       const startOffset = new THREE.Vector3();
       for (const c of companions) {
@@ -743,7 +935,8 @@
       const dy = ev.clientY - tapDown.y;
       const dt = performance.now() - tapDown.t;
       if (Math.hypot(dx, dy) <= TAP_MOVE_TOL && dt <= TAP_TIME_TOL) {
-        handleTap(ev);
+        if (dialogueActive) advanceDialogue();
+        else                handleTap(ev);
       }
     });
 
@@ -820,6 +1013,28 @@
           currentAction = desired;
         }
         mixer.update(dt);
+      }
+
+      // NPCs — drive their mixers and check proximity for dialogue
+      let nearestPromptable = null;
+      let nearestDist = Infinity;
+      for (const n of npcs) {
+        if (n.mixer) n.mixer.update(dt);
+        if (dialogueActive) continue;
+        if (n.when && !n.when()) continue;
+        const d = finn.position.distanceTo(n.group.position);
+        if (d < n.promptDist && d < nearestDist) {
+          nearestPromptable = n;
+          nearestDist = d;
+        }
+        if (d < n.triggerDist && !moving) {
+          startDialogue(n.script);
+          break;
+        }
+      }
+      if (!dialogueActive) {
+        if (nearestPromptable) dlgUI.prompt.classList.add('visible');
+        else                   dlgUI.prompt.classList.remove('visible');
       }
 
       // Companions — lerp to offset-from-Finn, match facing, drive their mixers
