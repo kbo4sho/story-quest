@@ -170,15 +170,19 @@
     const sun = new THREE.DirectionalLight(biome.sun.color, biome.sun.intensity);
     sun.position.set(30, 50, 20);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -40;
-    sun.shadow.camera.right = 40;
-    sun.shadow.camera.top = 40;
-    sun.shadow.camera.bottom = -40;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -25;
+    sun.shadow.camera.right = 25;
+    sun.shadow.camera.top = 25;
+    sun.shadow.camera.bottom = -25;
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 120;
     sun.shadow.bias = -0.0005;
     scene.add(sun);
+    // Sun target must be in the scene graph for its transform to take effect.
+    scene.add(sun.target);
+    // Fixed sun direction relative to whatever Finn is standing under.
+    const SUN_OFFSET = new THREE.Vector3(30, 50, 20);
 
     // Sky dome — vertical gradient from warm horizon to cool zenith
     const skyGeo = new THREE.SphereGeometry(240, 32, 16);
@@ -330,6 +334,12 @@
       });
     }
     function pickClip(clips, keywords) {
+      // Prefer exact match on the tail after any "Prefix|" (so "Rig|Idle_Loop"
+      // with keyword "idle_loop" wins over "Crouch_Idle_Loop").
+      for (const kw of keywords) {
+        const exact = clips.find((x) => x.name.split('|').pop().toLowerCase() === kw);
+        if (exact) return exact;
+      }
       for (const kw of keywords) {
         const c = clips.find((x) => x.name.toLowerCase().includes(kw));
         if (c) return c;
@@ -343,26 +353,106 @@
     let currentAction = null;
     let characterLoaded = false;
 
-    (async () => {
-      // Character is biome-agnostic
-      const charGlb = await loadGLB('./assets/character.glb');
-      const charModel = charGlb.scene;
-      charModel.scale.setScalar(0.75); // kid-sized
-      charModel.rotation.y = Math.PI; // GLB faces -Z; flip to match our facing convention
-      applyShadows(charModel);
-      while (finn.children.length) finn.remove(finn.children[0]);
-      finn.add(charModel);
+    // Companions follow Finn at fixed local-space offsets; each has its own
+    // mixer + idle/walk actions fadeset the same way as Finn's.
+    const companions = [];
+    let companionsReady = false;
+    const UP = new THREE.Vector3(0, 1, 0);
 
-      mixer = new THREE.AnimationMixer(charModel);
-      const idleClip = pickClip(charGlb.animations, ['idle_loop', 'idle']);
-      const walkClip = pickClip(charGlb.animations, ['walk_loop', 'walk', 'jog', 'run']);
-      if (idleClip) idleAction = mixer.clipAction(idleClip);
-      if (walkClip) walkAction = mixer.clipAction(walkClip);
-      if (idleAction) {
-        idleAction.play();
-        currentAction = idleAction;
-      }
+    // KayKit characters hold equipment as named child meshes. Hide them so the
+    // chibi adventurers read as generic kids for a K-2 audience.
+    const WEAPON_KEYWORDS = [
+      'sword','dagger','knife','axe','staff','stick','wand','bow','arrow',
+      'mace','spear','shield','torch','hammer','bottle','book','rod',
+    ];
+    function hideEquipment(root) {
+      root.traverse((n) => {
+        if (!n.name) return;
+        const lower = n.name.toLowerCase();
+        if (WEAPON_KEYWORDS.some((kw) => lower.includes(kw))) n.visible = false;
+      });
+    }
+
+    // Prepare a KayKit chibi character: scale, face our convention, hide
+    // weapons, set up shadows + mixer with Idle/Walking_A actions.
+    function setupKayKitChar(glb, groupTarget, initialActionRef, scale = 1.0) {
+      const model = glb.scene;
+      model.scale.setScalar(scale);
+      hideEquipment(model);
+      applyShadows(model);
+      while (groupTarget.children.length) groupTarget.remove(groupTarget.children[0]);
+      groupTarget.add(model);
+
+      const m = new THREE.AnimationMixer(model);
+      const idleClip = pickClip(glb.animations, ['unarmed_idle', 'idle']);
+      const walkClip = pickClip(glb.animations, ['walking_a', 'walking', 'walk']);
+      const idle = idleClip ? m.clipAction(idleClip) : null;
+      const walk = walkClip ? m.clipAction(walkClip) : null;
+      if (walk) walk.timeScale = 1.4;
+      if (idle) idle.play();
+      return { mixer: m, idle, walk };
+    }
+
+    (async () => {
+      // Load Finn, Wren, and Pip GLBs in parallel
+      const [finnGlb, wrenGlb, frogGlb] = await Promise.all([
+        loadGLB('./assets/finn.glb'),
+        loadGLB('./assets/wren.glb'),
+        loadGLB('./assets/frog.glb'),
+      ]);
+
+      // Finn — KayKit Rogue_Hooded
+      const finnSetup = setupKayKitChar(finnGlb, finn, null, 1.0);
+      mixer = finnSetup.mixer;
+      idleAction = finnSetup.idle;
+      walkAction = finnSetup.walk;
+      if (idleAction) currentAction = idleAction;
       characterLoaded = true;
+
+      // Wren — KayKit Mage (own GLB, own skeleton, own mixer)
+      const wren = new THREE.Group();
+      scene.add(wren);
+      const wrenSetup = setupKayKitChar(wrenGlb, wren, null, 1.0);
+
+      // Pip — frog sidekick. Separate GLB with its own Idle/Jump animations.
+      const pipScene = frogGlb.scene;
+      pipScene.scale.setScalar(0.5);
+      applyShadows(pipScene);
+      const pip = new THREE.Group();
+      pip.add(pipScene);
+      scene.add(pip);
+      const pipMixer = new THREE.AnimationMixer(pipScene);
+      const pipIdleClip = pickClip(frogGlb.animations, ['idle']);
+      const pipWalkClip = pickClip(frogGlb.animations, ['walk', 'jump', 'hop']);
+      const pipIdle = pipIdleClip ? pipMixer.clipAction(pipIdleClip) : null;
+      const pipWalk = pipWalkClip ? pipMixer.clipAction(pipWalkClip) : null;
+      if (pipWalk) pipWalk.timeScale = 1.4;
+      if (pipIdle) pipIdle.play();
+
+      companions.push(
+        {
+          group: wren, mixer: wrenSetup.mixer,
+          idle: wrenSetup.idle, walk: wrenSetup.walk, current: wrenSetup.idle,
+          offset: new THREE.Vector3(-1.7, 0, -1.4),
+        },
+        {
+          group: pip, mixer: pipMixer,
+          idle: pipIdle, walk: pipWalk, current: pipIdle,
+          offset: new THREE.Vector3(1.2, 0, -0.9),
+        },
+      );
+      // Snap companions to their start offsets so they don't slide in from origin
+      const startOffset = new THREE.Vector3();
+      for (const c of companions) {
+        startOffset.copy(c.offset).applyAxisAngle(UP, finn.rotation.y);
+        c.group.position.set(
+          finn.position.x + startOffset.x,
+          heightAt(finn.position.x + startOffset.x, finn.position.z + startOffset.z),
+          finn.position.z + startOffset.z,
+        );
+        c.group.rotation.y = finn.rotation.y;
+      }
+      companionsReady = true;
 
       // Biome props — load all in parallel, then scatter per spec
       const propGlbs = await Promise.all(
@@ -593,6 +683,33 @@
         }
         mixer.update(dt);
       }
+
+      // Companions — lerp to offset-from-Finn, match facing, drive their mixers
+      if (companionsReady) {
+        const followK = 1 - Math.pow(0.001, dt);
+        const tmpOff = new THREE.Vector3();
+        for (const c of companions) {
+          tmpOff.copy(c.offset).applyAxisAngle(UP, finn.rotation.y);
+          const dx = finn.position.x + tmpOff.x;
+          const dz = finn.position.z + tmpOff.z;
+          c.group.position.x += (dx - c.group.position.x) * followK;
+          c.group.position.z += (dz - c.group.position.z) * followK;
+          c.group.position.y = heightAt(c.group.position.x, c.group.position.z);
+          c.group.rotation.y = finn.rotation.y;
+
+          const desired = (moving && c.walk) ? c.walk : c.idle;
+          if (desired && desired !== c.current) {
+            if (c.current) c.current.fadeOut(0.2);
+            desired.reset().fadeIn(0.2).play();
+            c.current = desired;
+          }
+          c.mixer.update(dt);
+        }
+      }
+
+      // Sun / shadow camera tracks Finn so shadows stay crisp anywhere in the world
+      sun.target.position.copy(finn.position);
+      sun.position.copy(finn.position).add(SUN_OFFSET);
 
       // Camera smoothing
       desiredCamPos.copy(finn.position).add(cameraOffset);
