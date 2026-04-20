@@ -272,6 +272,25 @@
     // terrain contributions from registered regions (see below).
     const heightOctaves = biome.height.octaves;
 
+    // Save / resume prelude — declared here (above the region registry) so
+    // the spawned-region restore below can read `savedState` before the
+    // terrain mesh is generated. Full saveState/resetState + Reset-button
+    // wiring lives further down.
+    const SAVE_KEY = 'world-quest-save-v1';
+    const SAVE_VERSION = 1;
+    function loadSavedState() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (!data || data.version !== SAVE_VERSION) return null;
+        return data;
+      } catch (e) {
+        return null;
+      }
+    }
+    const savedState = loadSavedState();
+
     // Region registry — one entry per placed region. Each region references
     // a template for its terrain + content build logic, plus a center and a
     // params bag the template reads. Populated synchronously before the
@@ -402,6 +421,23 @@
         ],
       },
     });
+
+    // Restore topic-spawned regions from a prior session BEFORE the terrain
+    // mesh is generated, so heightAt includes their contributions and the
+    // hills appear fully risen on reload (no re-animation).
+    if (savedState && Array.isArray(savedState.spawnedRegions)) {
+      for (const sp of savedState.spawnedRegions) {
+        regions.push({
+          id:       sp.id,
+          template: TEMPLATE_LOOKOUT, // only spawn-template supported in W4b
+          center:   sp.center,
+          params:   sp.params,
+          topic:    sp.topic,
+          topicKey: sp.topicKey,
+          restored: true,
+        });
+      }
+    }
 
     // Procedural audio — zero external assets. Pink-noise ambient loop plus
     // short tonal SFX generated on demand via Web Audio API. `init()` must
@@ -535,24 +571,6 @@
       },
     };
 
-    // Save / resume via localStorage. A single-object schema keyed by
-    // SAVE_KEY; version bumps invalidate old saves.
-    const SAVE_KEY = 'world-quest-save-v1';
-    const SAVE_VERSION = 1;
-
-    function loadSavedState() {
-      try {
-        const raw = localStorage.getItem(SAVE_KEY);
-        if (!raw) return null;
-        const data = JSON.parse(raw);
-        if (!data || data.version !== SAVE_VERSION) return null;
-        return data;
-      } catch (e) {
-        return null;
-      }
-    }
-    const savedState = loadSavedState();
-
     function saveState() {
       try {
         const data = {
@@ -565,6 +583,15 @@
           },
           flags: { ...flags },
           npcs: npcs.map((n) => ({ id: n.id, met: !!n.met })),
+          spawnedRegions: regions
+            .filter((r) => r.topicKey)
+            .map((r) => ({
+              id:       r.id,
+              topicKey: r.topicKey,
+              center:   { x: r.center.x, z: r.center.z },
+              params:   { ...r.params },
+              topic:    r.topic,
+            })),
         };
         localStorage.setItem(SAVE_KEY, JSON.stringify(data));
       } catch (e) {
@@ -692,6 +719,119 @@
       groundColors[i * 3 + 2] = THREE.MathUtils.clamp(tmpC.b + jitter, 0, 1);
     }
     groundGeo.setAttribute('color', new THREE.BufferAttribute(groundColors, 3));
+
+    // ---- Topic-driven region spawning (W4b) ----
+    // Hardcoded content bundle per topic. At spawn time we register a region
+    // that uses TEMPLATE_LOOKOUT; later phases can swap in topic-specific
+    // templates (volcano cone, ocean cliff) without changing this table.
+    const TOPIC_CONTENT = {
+      volcanoes: {
+        name: 'Emberpeak',
+        npcName: 'Fiora',
+        lines: [
+          'Hello there — I am Fiora, keeper of the mountain.',
+          'This mountain is made of very old rock from deep under the ground.',
+          'When pressure builds inside, the rock pushes up and out — that is an eruption.',
+          'Safe travels, little traveler.',
+        ],
+        hillParams: { radius: 10, height: 4.8 },
+      },
+      ocean: {
+        name: 'Salt Cliff',
+        npcName: 'Marina',
+        lines: [
+          'Up here on the cliff, you can almost hear the waves.',
+          'The ocean is full of creatures — fish, crabs, whales, tiny ones that glow in the dark.',
+          'Come back any time and we can talk about any of them.',
+        ],
+        hillParams: { radius: 9, height: 3.2 },
+      },
+      forest: {
+        name: 'Elderwood Ridge',
+        npcName: 'Bram',
+        lines: [
+          'These trees are very old.',
+          'Each one grows a little bit every year — some were saplings when your grandparents were kids.',
+          'Listen quietly and you might hear the wind in their leaves.',
+        ],
+        hillParams: { radius: 9, height: 2.8 },
+      },
+    };
+
+    // Fixed spawn anchors around the world — a question picks the first free
+    // one. Positions are inside TERRAIN_BOUND and spaced from existing regions.
+    const SPAWN_SLOTS = [
+      { x:  32, z:  22 },
+      { x: -32, z:  22 },
+      { x:  30, z: -34 },
+      { x: -30, z: -34 },
+      { x:   0, z:  38 },
+    ];
+    function pickFreeSpawnSlot() {
+      for (const slot of SPAWN_SLOTS) {
+        let free = true;
+        for (const r of regions) {
+          const d = Math.hypot(r.center.x - slot.x, r.center.z - slot.z);
+          if (d < 14) { free = false; break; }
+        }
+        if (free) return slot;
+      }
+      return null;
+    }
+
+    // Active terrain-rise tweens. Each entry captures the mesh vertices inside
+    // a newly-spawned region's influence radius, their starting Y, and the
+    // target deltaY from terrainDelta. The tick loop advances them.
+    const risingTweens = [];
+    function beginTerrainRise(region, duration, onComplete) {
+      const pos = groundGeo.attributes.position;
+      const verts = [];
+      const radius = (region.params.radius || 10) + 2;
+      const r2 = radius * radius;
+      for (let i = 0; i < pos.count; i++) {
+        const vx = pos.getX(i);
+        const vz = pos.getZ(i);
+        const dx = vx - region.center.x;
+        const dz = vz - region.center.z;
+        if (dx * dx + dz * dz < r2) {
+          verts.push({
+            i,
+            startY: pos.getY(i),
+            deltaY: region.template.terrainDelta(vx, vz, region),
+          });
+        }
+      }
+      risingTweens.push({
+        region, verts,
+        startTime: performance.now(),
+        duration, onComplete,
+      });
+    }
+
+    function spawnRegion(topicKey) {
+      const content = TOPIC_CONTENT[topicKey];
+      if (!content) return;
+      // If Leo already asked about this topic, don't spawn a duplicate.
+      if (regions.some((r) => r.topicKey === topicKey)) return;
+      const slot = pickFreeSpawnSlot();
+      if (!slot) return;
+      const region = {
+        id:       `spawned-${topicKey}-${Date.now()}`,
+        template: TEMPLATE_LOOKOUT,
+        center:   slot,
+        params:   content.hillParams || { radius: 9, height: 3.0 },
+        topic:    content,
+        topicKey,
+      };
+      regions.push(region);
+      beginTerrainRise(region, 1500, () => {
+        if (region.template && region.template.build) {
+          region.template.build(region, null);
+        }
+        saveState();
+      });
+      saveState();
+    }
     groundGeo.computeVertexNormals();
     const ground = new THREE.Mesh(
       groundGeo,
@@ -1013,6 +1153,7 @@
           const btn = document.createElement('button');
           btn.textContent = choice.text;
           btn.addEventListener('click', () => {
+            if (choice.spawnTopic) spawnRegion(choice.spawnTopic);
             const idx = dlgScript.findIndex((n) => n.id === choice.goto);
             if (idx >= 0) { dlgIndex = idx; showDialogueNode(); }
             else          { endDialogue(); }
@@ -1092,9 +1233,9 @@
     const CAMPFIRE_SCRIPT = [
       { speaker: 'Wren', text: 'What would you like to learn about?',
         choices: [
-          { text: 'Volcanoes', goto: 'pick-volcanoes' },
-          { text: 'The ocean', goto: 'pick-ocean' },
-          { text: 'The forest', goto: 'pick-forest' },
+          { text: 'Volcanoes', goto: 'pick-volcanoes', spawnTopic: 'volcanoes' },
+          { text: 'The ocean', goto: 'pick-ocean',     spawnTopic: 'ocean' },
+          { text: 'The forest', goto: 'pick-forest',   spawnTopic: 'forest' },
           { text: 'Maybe later',  goto: 'pick-later' },
         ],
       },
@@ -1758,6 +1899,40 @@
       // Sun / shadow camera tracks Finn so shadows stay crisp anywhere in the world
       sun.target.position.copy(finn.position);
       sun.position.copy(finn.position).add(SUN_OFFSET);
+
+      // Terrain rise tweens — a new region's mesh vertices animate up/down
+      // from their pre-spawn Y to their final terrainDelta over ~1.5s.
+      if (risingTweens.length) {
+        const nowT = performance.now();
+        const pos = groundGeo.attributes.position;
+        let anyActive = false;
+        for (let i = risingTweens.length - 1; i >= 0; i--) {
+          const tw = risingTweens[i];
+          const elapsed = nowT - tw.startTime;
+          const u = Math.min(1, elapsed / tw.duration);
+          const e = 1 - Math.pow(1 - u, 3); // ease-out cubic
+          for (const v of tw.verts) {
+            const newY = v.startY + v.deltaY * e;
+            pos.setY(v.i, newY);
+            const tt = THREE.MathUtils.clamp((newY - spanLo) / spanRange, 0, 1);
+            if (tt < 0.5) tmpC.copy(lowC).lerp(midC, tt * 2);
+            else          tmpC.copy(midC).lerp(highC, (tt - 0.5) * 2);
+            groundColors[v.i * 3    ] = tmpC.r;
+            groundColors[v.i * 3 + 1] = tmpC.g;
+            groundColors[v.i * 3 + 2] = tmpC.b;
+          }
+          anyActive = true;
+          if (u >= 1) {
+            risingTweens.splice(i, 1);
+            if (tw.onComplete) tw.onComplete();
+          }
+        }
+        if (anyActive) {
+          pos.needsUpdate = true;
+          groundGeo.attributes.color.needsUpdate = true;
+          groundGeo.computeVertexNormals();
+        }
+      }
 
       // Plank tweens — arc each scattered plank into its bridge position.
       if (plankTweens.length) {
