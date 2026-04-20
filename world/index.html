@@ -399,7 +399,10 @@
         this.ambientGain = this.ctx.createGain();
         this.ambientGain.gain.value = 0;
         this.ambientGain.connect(this.master);
-        this._startAmbient();
+        // Ambient loop disabled for now — constant pink noise read as an
+        // airplane drone. Leave the infrastructure so we can swap in real
+        // wind gusts / per-biome loops later.
+        // this._startAmbient();
         this.inited = true;
       },
       resume() {
