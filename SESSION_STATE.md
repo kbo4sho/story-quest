@@ -1,80 +1,112 @@
-# Session State — 2026-04-19
+# Session State — 2026-04-20
 
-Brief for picking up this project cold. For full context read `WORLD_PLAN.md` then `FACTORY_PLAN.md`.
+Brief for picking up this project cold. For full context read `WORLD_PLAN.md` then `FACTORY_PLAN.md`. The latest commit on `main` is the authoritative source; this doc summarizes the shape of the live codebase.
 
 ## Where we are
 
-**W0 scaffold in place.** First Three.js scene lives at `world/index.html`: flat prairie, placeholder Finn (cylinder body, sphere head, green cone hat), one tree for scale, tap-to-move with a yellow ring target marker, smooth third-person camera follow, tablet-friendly touch (no zoom, no tap highlight). Ready for iPad playtest — open `world/index.html` directly or serve the folder over http. Next: tune controls against a real 5-year-old on a tablet (joystick fallback decision), then move to W1 (terrain gen + Quaternius kit).
+**W4 complete. W5 (LLM-authored vignettes) is next.**
 
-## What's locked
+The whole interactive loop is in place end-to-end: Leo walks up to a campfire, asks a question (via topic button or text input), a new terrain chunk drops in adjacent to the home prairie with a hill-shaped region on it, an NPC appears on top with flavor dialogue. Follow-up questions on the same topic add sub-NPCs to the existing region. The world accumulates with each question. Save/resume persists across reloads.
 
-- **Vision:** Leo walks up to a campfire, asks a question, a themed region spawns in a continuous 3D world he explores. Each region is a short learning adventure with dialogue, a puzzle, and a payoff. World accumulates with every question.
-- **Visual style:** Stylized low-poly / toon (*A Short Hike* aesthetic). Asset kit: Quaternius (free, CC0) to be integrated in W1.
-- **Tech:** Three.js. Tablet-first. Self-contained bundle (no build step preferred, like the existing Story Quest).
-- **Two views, one world:** third-person walking view + pulled-back world-overview view. Toggle via HUD.
-- **Starting state:** Small prairie with a campfire. Finn, Wren (with book), Pip present. No regions until Leo asks.
-- **Vignette model (locked decisions):**
-  - Implicit teaching — concept lives in dialogue + puzzle mechanics, not narration
-  - Layered depth — follow-up questions add to existing regions, never regenerate
-  - Four-beat climax — puzzle → character reaction → world change → celebration
-  - Puzzle exercises the concept when possible, even if not on theme
-  - 2–5 min fresh, collapsed on revisit (played beats skip dialogue)
-- **LLM generation:** single unified structured response per question produces terrain blueprint + cast + beats. Trust the local model for factual grounding in v1.
-- **What carries forward from Story Quest Phase 0:** schema as base, puzzle primitives (9 types), flag/effect/condition system, arc beats, simulate.py, author-layer prompt structure.
-- **What gets retired:** 2D Canvas renderer (`engine/index.html`), tile-based world format, bubble-map shell.
+## What's locked (from WORLD_PLAN and refined in practice)
+
+- **Vision:** Leo walks up to a campfire, asks a question, a themed region spawns in a continuous 3D world he explores. World accumulates.
+- **Visual style:** Stylized low-poly / toon (A Short Hike aesthetic). KayKit Adventurers + Quaternius kits.
+- **Tech:** Three.js via importmap (no build step). Tablet-first. Self-contained HTML.
+- **Two views:** third-person follow for walking, pulled-back Map view for the whole world. Fast-travel via Map tap (W4d-3).
+- **Cast:** Finn (KayKit Rogue_Hooded), Wren (Mage), Pip (bipedal chibi frog). All idle/walk animated; Wren + Pip follow Finn. Bridge Keeper (Knight) + dynamic NPCs for spawned regions.
+- **Vignette model:** implicit teaching, layered depth (follow-up questions deepen via sub-NPCs), four-beat climax (Whispering Woods is the reference).
+
+## Live architecture
+
+### Chunks (W4d)
+- World is a collection of chunks in `chunks[]`. Each has `offset`, `size`, `segments`, `geometry`, `mesh`, `biome`, `palette`, `groundColors`.
+- `findChunkAt(x, z)` + `isBlocked(x, z)` route through the registry. Anywhere outside every chunk is impassable.
+- `buildChunkMesh(chunk)` generates a chunk's terrain mesh with vertex-color palette baked in. Used for chunk 0 at load and for every spawned chunk.
+- Chunk 0 is the home prairie (180×180 at origin). Contains the campfire, Whispering Woods bridge vignette, Quiet Overlook.
+- Dynamic chunks are 50×50 at 8 fixed docks around chunk 0 (cardinal + diagonal at distance 125). 10-unit impassable gap between home and each dock.
+- `pickFreeChunkDock()` returns the next unclaimed dock.
+
+### Regions + templates
+- `regions[]` registry, each with `template`, `center`, `params`, `topic`, `topicKey`, `family`, `subNpcs`, `chunkId`.
+- Templates:
+  - `TEMPLATE_CROSSING`: hardcoded for Whispering Woods (ravine + bridge + planks + counting puzzle + four-beat climax).
+  - `TEMPLATE_MOUND`: gentle bell-shaped hill (TEMPLATE_LOOKOUT is an alias).
+  - `TEMPLATE_CLIFF`: sharp rise with flat plateau (for earthen / airy topics).
+  - `TEMPLATE_BASIN`: shallow carve (for watery topics).
+- Each template has `terrainDelta(x, z, region)` + optional `snapOut` + `build(region, saved)`.
+- Shared `buildDynamicNpcScene` is used by MOUND/CLIFF/BASIN — places an NPC on top (BASIN puts it on the north rim instead of in the carve).
+
+### Topic dispatcher
+- `resolveTopicFamily(topicString)` keyword-matches into earthen / watery / wooded / airy / default.
+- `FAMILY_CONFIGS` picks template + params per family (earthen → CLIFF, watery → BASIN, wooded/default → MOUND, airy → tall CLIFF).
+- `FAMILY_NAMES` is a per-family name pool for synthesized NPCs.
+- `resolveTopic(topicString)` returns `{ family, template, params, content: { name, npcName, lines } }`.
+
+### Spawn flow
+- `spawnRegion(topicString)`:
+  1. Normalize topic, check for exact match with an existing region's `topicKey` → if match, `deepenRegion` (adds a sub-NPC beside it).
+  2. Otherwise resolve the topic, pick a free chunk dock, create a new chunk + region, push both, call `buildChunkMesh(newChunk)`.
+  3. Animate chunk drop-in (tween `mesh.position.y` from -8 to 0 over 1.4s).
+  4. On tween complete, call `region.template.build(region, null)` to place NPC.
+  5. Call `updateWorldCameraBounds()` so Map view fits the new chunk.
+  6. `saveState()` persists.
+
+### Dialogue system
+- Campfire script has both choice buttons (Volcanoes / Ocean / Forest) and a text input (`input: { placeholder, submitText, spawnFromInput, goto }`).
+- Reusable NPCs (campfire) disarm on end and rearm only after Finn leaves their promptDist.
+- Dialogue camera frames Finn + NPC side-on during conversation.
+
+### Audio (procedural)
+- `audio` object — pink-noise ambient (currently disabled; "airplane drone" feel), plus: per-speaker dialogue blip, puzzle-chime arpeggio, bandpass-sweep whoosh (climax), filtered-noise footsteps.
+- Init on first `pointerdown` (iOS gesture requirement).
+
+### Save / resume (localStorage)
+- `saveState()` serializes: Finn position + facing, flags bag, per-NPC `met`, spawnedRegions (with `chunkId`, `templateId`, `family`, `subNpcs`, `topic`, etc.).
+- `savedState = loadSavedState()` runs at module load. Spawned regions + chunks restore into `regions[]` and `chunks[]` synchronously; each restored chunk's mesh builds right after chunk 0's.
+- Save triggers: end of dialogue, climax beat 4, periodic 2s while walking, after each spawn.
+- **Reset** button in top-right HUD clears save + reloads.
 
 ## Phased roadmap (W0–W6)
 
-- **W0** — Three.js scene, Finn walks on a prairie, tap-to-move, third-person camera. Tablet playtest.
-- **W1** — Terrain gen + Quaternius prop kit + biome palettes. Hand-author one biome.
-- **W2** — Port one Whispering Woods scene into a 3D region. Proves schema survives.
-- **W3** — Rule-based procedural region generator from topic descriptors.
-- **W4** — World-overview view + knowledge graph + campfire ask UX + region placement.
-- **W5** — LLM-authored vignettes (author layer, validator, repair loop).
-- **W6** — Layered depth, save/resume, polish, bundle.
+- **W0** ✓ — 3D shell
+- **W1** ✓ — Terrain + prop kit (Quaternius + KayKit) + biomes
+- **W2** ✓ — Hand-authored Whispering Woods vignette (Counting Bridge puzzle, four-beat climax)
+- **W3** ✓ — Region registry + templates (crossing, lookout/mound, cliff, basin)
+- **W4** ✓ — Campfire ask UX, topic dispatch, Map view, chunk-based world growth, fast-travel
+- **W5** — LLM-authored vignettes (author layer, validator, repair loop). Currently `resolveTopic` synthesizes flat dialogue; W5 replaces it with a structured LLM blueprint. Needs local Ollama/llama.cpp.
+- **W6** — Polish: tablet performance, save/resume polish, bundle, improved multi-chunk UX
 
-## First concrete step (next action)
+## Known open items (carry forward)
 
-**W0 scaffold — done.** `world/index.html` ships all the target behaviors:
-- Flat green prairie ground plane + subtle grid for motion feedback
-- Placeholder Finn (cylinder body, sphere head, green cone hat, facing nose, swinging legs)
-- Tap-to-move: raycast against ground, Finn walks to tap point, yellow ring target marker pulses and fades
-- Smooth third-person camera follow (lerp position + look-at)
-- One tree (cylinder trunk + cone canopy) for scale reference
-- iPad-friendly: `touch-action: none`, no tap highlight / callout, prevents double-tap zoom and pinch gestures, viewport locked
-
-Loaded via `<script type="importmap">` pointing at `three@0.161.0` on unpkg — no build step, matches existing Story Quest deployment style. The 2D `engine/` folder is untouched.
-
-**Next:** iPad playtest against the target 5-year-old. Decide joystick-fallback necessity (open question #6). Then kick off W1 (procedural terrain + Quaternius kit + biome palettes).
-
-## Open questions (flagged in WORLD_PLAN.md, decide as they become relevant)
-
-1. Fast travel in world view — tap-a-region to teleport, or always walk?
-2. Does Wren confirm questions at the campfire before region spawns?
-3. Simultaneous region spawning & spatial collision rules
-4. Region bounds — can they grow indefinitely, or cap and spawn adjacent?
-5. Save format — localStorage vs other (confirm at W6)
-6. Joystick fallback alongside tap-to-move — decide at W0 playtest
-7. First-launch onboarding before any question is asked
+- **Chunks have no ground cover** (grass tufts, flowers, pebbles) — only the home prairie does. Spawned chunks are bare except for the region's content. Polish pass can scatter props per chunk.
+- **Impassable gap between chunks** — fast-travel via Map bridges this for now. W4d-4+ could add walkable connectors (bridges, portals) or a seamless transition.
+- **All docks full at 8 chunks** — second ring / chunk removal not yet handled. Warn + no-op currently.
+- **Ambient audio disabled** — flat pink noise read as airplane drone. Infrastructure kept; needs better source (wind gusts, per-biome loops).
+- **Procedural dialogue is flat** — synthesized lines are templated stand-ins until W5 LLM integration.
+- **Portrait phone dialogue panel crowds the count puzzle** — known; not blocking.
 
 ## File layout
 
-- `WORLD_PLAN.md` — current active plan (supersedes RABBIT_HOLE_PLAN.md and AUTONOMOUS_PLAN.md, now archived)
-- `FACTORY_PLAN.md` — retained as architecture reference
-- `SPEC.md` — original Story Quest Episode 1 spec (historical reference)
-- `index.html` — current Story Quest game (2D)
-- `world/` — 3D runtime, starting with W0 (`index.html`) — Three.js scene, tap-to-move Finn on prairie
-- `engine/` — Phase 0 2D engine (`index.html`, `simulate.py`) — will be retired after 3D runtime is playable
-- `schema/` — `story.schema.json`, `story-example.json` — carries forward, base for region blueprint schema
-- `validator/` — Phase 0 validator work
-- `assets/` — existing image assets
+- `WORLD_PLAN.md` — active vision + phased roadmap
+- `FACTORY_PLAN.md` — retained architecture reference
+- `SPEC.md` — original Story Quest Episode 1 spec (historical)
+- `world/index.html` — live 3D runtime (~2570 lines, self-contained)
+- `world/assets/` — Quaternius + KayKit GLBs (CC0)
+- `engine/`, `schema/`, `validator/` — Phase 0 2D engine / schema / validator (background reference, will be retired)
+- `index.html` — original Story Quest 2D game
 - `archive/` — superseded plans
 
-## Resume protocol
+## How to resume
 
-A fresh Claude reading this doc should:
+1. `cd /Users/kevinbolander/clawd/projects/story-quest && git pull`
+2. Serve: `cd world && python3 -m http.server 3458 --bind 0.0.0.0` → `http://brick.local:3458/`
+3. Check the latest commits: `git log --oneline -10`
+4. Read `WORLD_PLAN.md` if touching direction; this doc for live state.
+5. Decide next phase:
+   - W5 (LLM vignettes) if continuing the plan. Substantial: needs Ollama + prompts + validator + repair loop.
+   - Polish pass: ground cover for dynamic chunks, walkable chunk connectors, better ambient audio, LLM or heuristic-driven dialogue enrichment.
 
-1. Read `WORLD_PLAN.md` (full vision + phased roadmap)
-2. Read this doc (state of play)
-3. Skim `FACTORY_PLAN.md` if touching author layer, validator, or asset pipeline
-4. Start W0 when the user gives the go.
+## Latest commit
+
+As of this doc: `debc00b` — "W4d-3: new questions spawn dedicated chunks adjacent to home". Run `git log --oneline -1` for current.
