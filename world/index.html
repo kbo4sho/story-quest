@@ -587,24 +587,49 @@
         grassTuft:  { color: 0x9c8b4d, count: 60,  minDist: 1.4 },
         flowerProc: { count: 8,   minDist: 2.4 },
         pebble:     { color: 0x7a6452, count: 420, minDist: 0.45 },
+        props: [
+          { url: 'boulder.glb',     count: 3, minDist: 4.0, scale: [0.9, 1.5] },
+          { url: 'rock-chunky.glb', count: 6, minDist: 2.2, scale: [0.7, 1.2] },
+          { url: 'rock.glb',        count: 7, minDist: 1.6, scale: [0.5, 1.0] },
+          { url: 'stump.glb',       count: 1, minDist: 4.0, scale: [0.7, 1.0] },
+        ],
       },
       watery: {
         ground:     { low: 0x4b7a7d, mid: 0x7aa9a0, high: 0xcfd9a9, jitter: 0.04, span: [-2.4, 2.2] },
         grassTuft:  { color: 0x4f8a65, count: 120, minDist: 1.0 },
         flowerProc: { count: 40,  minDist: 1.4 },
         pebble:     { color: 0x6c8b90, count: 360, minDist: 0.5 },
+        props: [
+          { url: 'rock-mossy.glb', count: 4, minDist: 2.4, scale: [0.6, 1.1] },
+          { url: 'rock.glb',       count: 6, minDist: 1.6, scale: [0.4, 0.8] },
+          { url: 'log.glb',        count: 2, minDist: 4.0, scale: [0.7, 1.1] },
+          { url: 'bush-leafy.glb', count: 5, minDist: 2.0, scale: [0.8, 1.2] }, // reed-ish
+        ],
       },
       wooded: {
         ground:     { low: 0x3f5a2d, mid: 0x6c8a3f, high: 0x9cbf63, jitter: 0.05, span: [-1.2, 3.2] },
         grassTuft:  { color: 0x4e7f2c, count: 220, minDist: 0.8 },
         flowerProc: { count: 140, minDist: 1.0 },
         pebble:     { color: 0x5f564a, count: 180, minDist: 0.6 },
+        props: [
+          { url: 'tree-oak.glb',   count: 4, minDist: 3.2, scale: [0.9, 1.4] },
+          { url: 'tree-birch.glb', count: 3, minDist: 3.4, scale: [0.9, 1.4] },
+          { url: 'bush.glb',       count: 5, minDist: 2.0, scale: [0.9, 1.3] },
+          { url: 'bush-leafy.glb', count: 5, minDist: 1.8, scale: [0.8, 1.3] },
+          { url: 'mushroom.glb',   count: 4, minDist: 1.4, scale: [0.9, 1.3] },
+          { url: 'stump.glb',      count: 2, minDist: 3.0, scale: [0.7, 1.1] },
+        ],
       },
       airy: {
         ground:     { low: 0x9ab7c2, mid: 0xc6d6dc, high: 0xf0f3f5, jitter: 0.04, span: [-1.0, 7.5] },
         grassTuft:  { color: 0x88a999, count: 80,  minDist: 1.2 },
         flowerProc: { count: 24,  minDist: 1.8 },
         pebble:     { color: 0xb6bec3, count: 240, minDist: 0.6 },
+        props: [
+          { url: 'tree-pine.glb',      count: 3, minDist: 3.0, scale: [0.8, 1.2] },
+          { url: 'tree-pine-tall.glb', count: 2, minDist: 4.0, scale: [0.9, 1.3] },
+          { url: 'rock.glb',           count: 6, minDist: 1.6, scale: [0.4, 0.8] },
+        ],
       },
     };
 
@@ -1226,6 +1251,7 @@
       buildChunkMesh(newChunk);
       animateChunkDropIn(newChunk, 1400, () => {
         dressChunkGroundCover(newChunk, region);
+        dressChunkProps(newChunk, region);
         if (region.template && region.template.build) {
           region.template.build(region, null);
         }
@@ -1498,14 +1524,81 @@
       scatterInChunk(chunk, r, pebbleCount, () => makePebbleWith(mats.pebble, r),     skin.pebble.minDist,     clearances);
     }
 
+    // ---- Per-chunk GLB props (family-specific trees / rocks / bushes) ----
+    // Shared GLB cache so a given asset is fetched + parsed once even if
+    // several chunks reuse it. Sway (for foliage) is also applied once per URL.
+    const glbCache = {};
+    const swayApplied = new Set();
+    function loadGLBOnce(url) {
+      if (!glbCache[url]) glbCache[url] = loadGLB(`./assets/${url}`);
+      return glbCache[url];
+    }
+    function swayOptsFor(url) {
+      const u = url.toLowerCase();
+      if (u.includes('tree')) return { strength: 0.06, freq: 1.0, maxHeight: 3.0 };
+      if (u.includes('bush')) return { strength: 0.05, freq: 1.4, maxHeight: 0.9 };
+      if (/grass|flower/.test(u)) return { strength: 0.07, freq: 1.8, maxHeight: 0.6 };
+      return null;
+    }
+
+    // Scatter family-specific Quaternius/KayKit props inside a chunk. Async —
+    // loads any missing GLBs on first use. Fire-and-forget from call sites.
+    async function dressChunkProps(chunk, region) {
+      if (chunk.propsDressed) return;
+      chunk.propsDressed = true;
+      const skin = FAMILY_SKIN[chunk.family];
+      if (!skin || !skin.props || !skin.props.length) return;
+      let glbs;
+      try {
+        glbs = await Promise.all(skin.props.map((p) => loadGLBOnce(p.url)));
+      } catch (e) {
+        console.error('Chunk prop load failed:', e);
+        chunk.propsDressed = false;
+        return;
+      }
+      // Per-chunk RNG — offset by a different constant than ground cover so
+      // props don't align with grass tufts.
+      const seed = (Math.abs(Math.round(chunk.offset.x * 29.7 + chunk.offset.z * 53.3)) + 104729) >>> 0;
+      const r = makeSeededRandom(seed || 3);
+      const clearances = region
+        ? [{ x: region.center.x, z: region.center.z,
+             r: ((region.params && region.params.radius) || 5) + 1 }]
+        : [];
+      for (let i = 0; i < skin.props.length; i++) {
+        const spec = skin.props[i];
+        const glb  = glbs[i];
+        const opts = swayOptsFor(spec.url);
+        if (opts && !swayApplied.has(spec.url)) {
+          applySwayToScene(glb.scene, opts);
+          swayApplied.add(spec.url);
+        }
+        scatterInChunk(chunk, r, spec.count, () => {
+          const obj = glb.scene.clone(true);
+          applyShadows(obj);
+          const [minS, maxS] = spec.scale;
+          obj.scale.setScalar(minS + r() * (maxS - minS));
+          return obj;
+        }, spec.minDist, clearances);
+      }
+    }
+
     // Restore-path dressing: restored chunks had their meshes built above
     // (before the scatter helpers existed). Dress them now with their family's
-    // ground cover.
+    // ground cover. GLB prop scatter is deferred to a microtask so that the
+    // gltfLoader const (initialized later in this module) is in scope by the
+    // time loadGLBOnce reads it.
     for (const c of chunks) {
       if (c === chunk0 || c.groundCover) continue;
       const r = regions.find((rg) => rg.chunkId === c.id);
       dressChunkGroundCover(c, r);
     }
+    queueMicrotask(() => {
+      for (const c of chunks) {
+        if (c === chunk0 || c.propsDressed) continue;
+        const r = regions.find((rg) => rg.chunkId === c.id);
+        dressChunkProps(c, r);
+      }
+    });
 
     // Distant silhouette mountains — large dark cones in a ring just past the
     // playable area. They peek above the fog line and give the world depth.
