@@ -402,6 +402,11 @@
       return chunk;
     }
 
+    // Per-chunk dimensions for dynamically-spawned chunks (also used by
+    // savedState restore to rebuild prior-session chunks).
+    const DYNAMIC_CHUNK_SIZE = 50;
+    const DYNAMIC_CHUNK_SEGMENTS = 48;
+
     // Region registry — one entry per placed region. Each region references
     // a template for its terrain + content build logic, plus a center and a
     // params bag the template reads. Populated synchronously before the
@@ -646,12 +651,25 @@
       },
     });
 
-    // Restore topic-spawned regions from a prior session BEFORE the terrain
-    // mesh is generated, so heightAt includes their contributions and the
-    // hills appear fully risen on reload (no re-animation).
+    // Restore topic-spawned regions + chunks from a prior session. Each
+    // spawned region gets its own DYNAMIC_CHUNK_SIZE chunk centered on the
+    // region. Chunks and regions push first so heightAt sees them; each
+    // chunk mesh then builds via buildChunkMesh with the region's
+    // terrainDelta baked in — no drop-in animation on reload.
     if (savedState && Array.isArray(savedState.spawnedRegions)) {
       for (const sp of savedState.spawnedRegions) {
-        regions.push({
+        const chunkId = sp.chunkId || `chunk-${sp.id}`;
+        const chunk = {
+          id:       chunkId,
+          offset:   { x: sp.center.x, z: sp.center.z },
+          size:     DYNAMIC_CHUNK_SIZE,
+          segments: DYNAMIC_CHUNK_SEGMENTS,
+          halfSize: DYNAMIC_CHUNK_SIZE / 2,
+          geometry: null,
+          mesh:     null,
+          biome,
+        };
+        const region = {
           id:       sp.id,
           template: TEMPLATES_BY_ID[sp.templateId] || TEMPLATE_MOUND,
           center:   sp.center,
@@ -660,8 +678,13 @@
           topicKey: sp.topicKey,
           family:   sp.family,
           subNpcs:  Array.isArray(sp.subNpcs) ? sp.subNpcs : [],
+          chunkId,
           restored: true,
-        });
+        };
+        chunks.push(chunk);
+        regions.push(region);
+        // Mesh is built later (after `scene` exists, right after chunk 0's
+        // mesh). Attempting it here would TDZ on scene.
       }
     }
 
@@ -813,6 +836,7 @@
             .filter((r) => r.topicKey)
             .map((r) => ({
               id:         r.id,
+              chunkId:    r.chunkId,
               topicKey:   r.topicKey,
               family:     r.family,
               templateId: r.template && r.template.id,
@@ -851,6 +875,32 @@
     let viewMode = 'walk';
     const WORLD_CAM_POS    = new THREE.Vector3(0, 70, 55);
     const WORLD_CAM_TARGET = new THREE.Vector3(0, 0, 0);
+
+    // Recompute the world-view camera position to fit the bounding box of
+    // all chunks. Called after chunks are added/removed.
+    function updateWorldCameraBounds() {
+      if (!chunks.length) {
+        WORLD_CAM_POS.set(0, 70, 55);
+        WORLD_CAM_TARGET.set(0, 0, 0);
+        return;
+      }
+      let minX = Infinity, maxX = -Infinity;
+      let minZ = Infinity, maxZ = -Infinity;
+      for (const c of chunks) {
+        const half = c.size / 2;
+        minX = Math.min(minX, c.offset.x - half);
+        maxX = Math.max(maxX, c.offset.x + half);
+        minZ = Math.min(minZ, c.offset.z - half);
+        maxZ = Math.max(maxZ, c.offset.z + half);
+      }
+      const cx = (minX + maxX) * 0.5;
+      const cz = (minZ + maxZ) * 0.5;
+      const extent = Math.max(maxX - minX, maxZ - minZ);
+      const height = Math.max(70, extent * 0.55);
+      const zBack  = Math.max(55, extent * 0.32);
+      WORLD_CAM_POS.set(cx, height, cz + zBack);
+      WORLD_CAM_TARGET.set(cx, 0, cz);
+    }
 
     const viewToggleBtn = document.getElementById('view-toggle-btn');
     if (viewToggleBtn) viewToggleBtn.addEventListener('click', (ev) => {
@@ -971,67 +1021,57 @@
     const spanLo       = chunk0.palette.spanLo;
     const spanRange    = chunk0.palette.spanRange;
 
-    // ---- Topic-driven region spawning (W4 polish: Option C) ----
-    // spawnRegion(topic) — unified entry point for every asked question.
-    // Flow:
-    //   1. Normalize the topic.
-    //   2. If an existing region already covers this exact topic → deepen it
-    //      (add a sub-NPC beside the region rather than spawn a new hill).
-    //   3. Otherwise resolve the topic's family and pick placement: near an
-    //      existing same-family region if possible (clustering), else a
-    //      fresh ring slot.
-    //   4. Register + rise terrain + build content.
+    // ---- Topic-driven chunk spawning (W4d-3) ----
+    // Each asked topic claims its own chunk of world — a small independent
+    // patch of terrain with the region's hill baked in. Chunks sit at fixed
+    // dock positions around the home prairie with impassable gaps between
+    // them. Leo can fast-travel to a chunk by tapping it in the world view.
 
-    // Fixed ring-slot anchors for fresh families. Positions are inside
-    // TERRAIN_BOUND and spaced from the prairie's existing regions.
-    const SPAWN_SLOTS = [
-      { x:  32, z:  22 },
-      { x: -32, z:  22 },
-      { x:  30, z: -34 },
-      { x: -30, z: -34 },
-      { x:   0, z:  38 },
+    // (Per-chunk dimensions are declared earlier near the chunk helpers so
+    // the savedState restore can instantiate chunks for prior questions.)
+
+    // Fixed docks around the home prairie. Each new question takes the next
+    // free dock. Positions clear chunk 0's 90-unit half-size with an 10-unit
+    // gap; diagonal docks sit at 125 along each axis so corners don't touch.
+    const CHUNK_DOCKS = [
+      { x:  125, z:    0 }, // east
+      { x:    0, z:  125 }, // south
+      { x: -125, z:    0 }, // west
+      { x:    0, z: -125 }, // north
+      { x:  125, z:  125 }, // SE
+      { x: -125, z:  125 }, // SW
+      { x: -125, z: -125 }, // NW
+      { x:  125, z: -125 }, // NE
     ];
-    const MIN_SLOT_CLEARANCE = 14;
-    function slotIsFree(cx, cz, clearance = MIN_SLOT_CLEARANCE) {
-      for (const r of regions) {
-        const d = Math.hypot(r.center.x - cx, r.center.z - cz);
-        if (d < clearance) return false;
-      }
-      return true;
-    }
-    function pickFreeSpawnSlot() {
-      for (const slot of SPAWN_SLOTS) {
-        if (slotIsFree(slot.x, slot.z)) return slot;
+    function pickFreeChunkDock() {
+      for (const dock of CHUNK_DOCKS) {
+        let free = true;
+        for (const c of chunks) {
+          if (c.id === 'home') continue;
+          const d = Math.hypot(c.offset.x - dock.x, c.offset.z - dock.z);
+          if (d < 40) { free = false; break; }
+        }
+        if (free) return dock;
       }
       return null;
     }
 
-    // Try to seat a new region within a ring around any same-family region.
-    // Falls back to a fresh ring slot if all nearby candidates are taken.
-    function pickPlacementForFamily(family) {
-      const sameFamily = regions.filter((r) => r.family === family);
-      if (sameFamily.length > 0) {
-        const CLUSTER_DISTS = [15, 17, 19];
-        const ANGLES_DEG = [45, 90, 135, 180, 225, 270, 315, 0];
-        for (const anchor of sameFamily) {
-          for (const dist of CLUSTER_DISTS) {
-            for (const deg of ANGLES_DEG) {
-              const a = (deg * Math.PI) / 180;
-              const cx = anchor.center.x + Math.cos(a) * dist;
-              const cz = anchor.center.z + Math.sin(a) * dist;
-              if (Math.abs(cx) > TERRAIN_BOUND - 6) continue;
-              if (Math.abs(cz) > TERRAIN_BOUND - 6) continue;
-              if (slotIsFree(cx, cz, MIN_SLOT_CLEARANCE)) return { x: cx, z: cz };
-            }
-          }
-        }
-      }
-      return pickFreeSpawnSlot();
+    // Drop-in animation — chunks start a few units below ground and tween up.
+    const chunkDropIns = [];
+    function animateChunkDropIn(chunk, duration, onComplete) {
+      chunk.mesh.position.y = -8;
+      chunkDropIns.push({
+        chunk,
+        from: -8,
+        to: 0,
+        startTime: performance.now(),
+        duration,
+        onComplete,
+      });
     }
 
-    // Active terrain-rise tweens. Each entry captures mesh vertices inside
-    // the newly-spawned region's influence radius, their starting Y, and the
-    // target deltaY from terrainDelta. The tick loop advances them.
+    // Kept for back-compat with any code that still references ring-slot
+    // placement from pre-chunk days. The old W4b spawn path is retired.
     const risingTweens = [];
     function beginTerrainRise(region, duration, onComplete) {
       const pos = groundGeo.attributes.position;
@@ -1107,34 +1147,58 @@
         deepenRegion(existing, topicString);
         return;
       }
-      // Fresh topic: resolve family + content, pick a clustered slot if same
-      // family exists, else a ring slot.
+      // Fresh topic: claim a dedicated chunk at the next free dock.
+      const dock = pickFreeChunkDock();
+      if (!dock) return; // all docks full — future ring expansion will handle this
       const resolved = resolveTopic(topicString);
-      const slot = pickPlacementForFamily(resolved.family);
-      if (!slot) return;
+      const keySafe = rawKey.replace(/\s+/g, '-');
+      const chunkId = `chunk-${keySafe}-${Date.now()}`;
+      const newChunk = {
+        id: chunkId,
+        offset: { x: dock.x, z: dock.z },
+        size: DYNAMIC_CHUNK_SIZE,
+        segments: DYNAMIC_CHUNK_SEGMENTS,
+        halfSize: DYNAMIC_CHUNK_SIZE / 2,
+        geometry: null,
+        mesh: null,
+        biome,
+      };
       const region = {
-        id:       `spawned-${rawKey.replace(/\s+/g,'-')}-${Date.now()}`,
+        id:       `spawned-${keySafe}-${Date.now()}`,
         template: resolved.template,
-        center:   slot,
+        center:   { x: dock.x, z: dock.z }, // region centered on its chunk
         params:   resolved.params,
         topic:    resolved.content,
         topicKey: topicString,
         family:   resolved.family,
         subNpcs:  [],
+        chunkId,
       };
+      // Register the chunk and region BEFORE building mesh so heightAt picks
+      // up both the new chunk's bounds and the region's terrainDelta.
+      chunks.push(newChunk);
       regions.push(region);
-      beginTerrainRise(region, 1500, () => {
+      buildChunkMesh(newChunk);
+      animateChunkDropIn(newChunk, 1400, () => {
         if (region.template && region.template.build) {
           region.template.build(region, null);
         }
         saveState();
       });
+      updateWorldCameraBounds();
       saveState();
     }
     // buildChunkMesh already created the mesh, set shadows, and added it to
     // the scene. This alias keeps the old `ground` reference available for
     // the tap-to-move raycast.
     const ground = chunk0.mesh;
+
+    // Restored chunks from a prior session — their regions and chunk stubs
+    // were pushed earlier (before `scene` existed), so build those meshes
+    // now that we can safely call scene.add through buildChunkMesh.
+    for (const c of chunks) {
+      if (c !== chunk0 && !c.mesh) buildChunkMesh(c);
+    }
 
     // Wind sway — height-weighted vertex displacement injected into existing
     // MeshLambert/MeshStandard materials via onBeforeCompile. Bottom vertices
@@ -2091,14 +2155,34 @@
     }
 
     function handleTap(ev) {
-      if (viewMode === 'world') return; // map view is look-only for now
       setPointerFromEvent(ev, pointer);
       raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObject(ground, false)[0];
+      const chunkMeshes = [];
+      for (const c of chunks) { if (c.mesh) chunkMeshes.push(c.mesh); }
+      const hit = raycaster.intersectObjects(chunkMeshes, false)[0];
       if (!hit) return;
+      if (viewMode === 'world') {
+        // Fast-travel — teleport Finn to the tapped chunk, snap companions,
+        // then return to walking view.
+        const y = heightAt(hit.point.x, hit.point.z);
+        finn.position.set(hit.point.x, y, hit.point.z);
+        facing = Math.atan2(-hit.point.x, -hit.point.z);
+        finn.rotation.y = facing;
+        for (const c of companions) {
+          const off = c.offset.clone().applyAxisAngle(UP, finn.rotation.y);
+          const cx = finn.position.x + off.x;
+          const cz = finn.position.z + off.z;
+          c.group.position.set(cx, heightAt(cx, cz), cz);
+          c.group.rotation.y = finn.rotation.y;
+        }
+        viewMode = 'walk';
+        if (viewToggleBtn) viewToggleBtn.textContent = 'Map';
+        marker.visible = false;
+        moving = false;
+        saveState();
+        return;
+      }
       target.copy(hit.point);
-      target.x = THREE.MathUtils.clamp(target.x, -TERRAIN_BOUND, TERRAIN_BOUND);
-      target.z = THREE.MathUtils.clamp(target.z, -TERRAIN_BOUND, TERRAIN_BOUND);
       // Region collision — snap target to the rim on Finn's current side.
       const snapped = snapOutOfBlocked(target.x, target.z, finn.position.z);
       target.x = snapped.x;
@@ -2280,6 +2364,23 @@
       // Sun / shadow camera tracks Finn so shadows stay crisp anywhere in the world
       sun.target.position.copy(finn.position);
       sun.position.copy(finn.position).add(SUN_OFFSET);
+
+      // Chunk drop-in tweens — whole chunks animate from below into place
+      // when a new topic spawns one.
+      if (chunkDropIns.length) {
+        const nowT = performance.now();
+        for (let i = chunkDropIns.length - 1; i >= 0; i--) {
+          const d = chunkDropIns[i];
+          const u = Math.min(1, (nowT - d.startTime) / d.duration);
+          const e = 1 - Math.pow(1 - u, 3);
+          d.chunk.mesh.position.y = d.from + (d.to - d.from) * e;
+          if (u >= 1) {
+            d.chunk.mesh.position.y = d.to;
+            chunkDropIns.splice(i, 1);
+            if (d.onComplete) d.onComplete();
+          }
+        }
+      }
 
       // Terrain rise tweens — a new region's mesh vertices animate up/down
       // from their pre-spawn Y to their final terrainDelta over ~1.5s.
