@@ -354,6 +354,24 @@
       return null;
     }
 
+    // Walkable connector bridges — oriented rectangles that span the
+    // impassable gap between home and each spawned chunk. Each entry:
+    //   { cx, cz, halfLen, halfWid, cos, sin, y, chunkId }
+    // A point (x, z) is on the bridge if its offset-rotated local coords
+    // fall inside (±halfLen, ±halfWid). `y` is the flat walking height.
+    const bridges = [];
+    function findBridgeAt(x, z) {
+      for (let i = 0; i < bridges.length; i++) {
+        const b = bridges[i];
+        const dx = x - b.cx;
+        const dz = z - b.cz;
+        const lx =  b.cos * dx + b.sin * dz;
+        const lz = -b.sin * dx + b.cos * dz;
+        if (Math.abs(lx) <= b.halfLen && Math.abs(lz) <= b.halfWid) return b;
+      }
+      return null;
+    }
+
     // Build a chunk's terrain mesh + vertex colors in place. The chunk's
     // mesh is positioned at chunk.offset so local vertex coords map to
     // world coords via mesh.position. Each chunk caches its geometry,
@@ -424,6 +442,12 @@
     }
 
     function heightAt(x, z) {
+      // On a walkable connector? Return its flat walking surface so Finn
+      // doesn't sink into the inter-chunk noise.
+      if (!findChunkAt(x, z)) {
+        const b = findBridgeAt(x, z);
+        if (b) return b.y;
+      }
       let h = 0;
       for (let i = 0; i < heightOctaves.length; i++) {
         const [freq, amp] = heightOctaves[i];
@@ -437,8 +461,11 @@
     const WALK_BLOCK_DEPTH = 0.5;
 
     function isBlocked(x, z) {
-      // Outside any chunk → impassable (W4d gap between chunks / beyond world).
-      if (!findChunkAt(x, z)) return true;
+      // Outside any chunk, but on a walkable connector? Passable.
+      // Otherwise outside any chunk → impassable.
+      if (!findChunkAt(x, z)) {
+        return !findBridgeAt(x, z);
+      }
       let deepest = 0;
       for (let i = 0; i < regions.length; i++) {
         const r = regions[i];
@@ -1249,6 +1276,7 @@
       chunks.push(newChunk);
       regions.push(region);
       buildChunkMesh(newChunk);
+      buildBridgeForChunk(newChunk);
       animateChunkDropIn(newChunk, 1400, () => {
         dressChunkGroundCover(newChunk, region);
         dressChunkProps(newChunk, region);
@@ -1524,6 +1552,63 @@
       scatterInChunk(chunk, r, pebbleCount, () => makePebbleWith(mats.pebble, r),     skin.pebble.minDist,     clearances);
     }
 
+    // ---- Walkable connector bridges ----
+    // One per spawned chunk, placed between home and the chunk's dock.
+    // Cardinal docks get a short straight slab; diagonals get a longer
+    // slab oriented along the (1,1) / (1,-1) axis. isBlocked/heightAt
+    // already consult `bridges[]` so walking across is automatic.
+    const BRIDGE_HALF_LEN_CARDINAL = 6;
+    const BRIDGE_HALF_LEN_DIAGONAL = 9;
+    const BRIDGE_HALF_WID = 2.5;
+    function buildBridgeForChunk(chunk) {
+      if (chunk.bridge) return chunk.bridge;
+      const dx = chunk.offset.x;
+      const dz = chunk.offset.z;
+      if (dx === 0 && dz === 0) return null;
+      const isDiag = dx !== 0 && dz !== 0;
+      const homeHalf  = chunk0.size / 2;
+      const chunkHalf = chunk.size / 2;
+      const sx = Math.sign(dx);
+      const sz = Math.sign(dz);
+      // Endpoints: home's nearest edge/corner and chunk's nearest edge/corner.
+      const homeX  = sx * homeHalf;
+      const homeZ  = sz * homeHalf;
+      const chunkX = dx - sx * chunkHalf;
+      const chunkZ = dz - sz * chunkHalf;
+      const cx = (homeX + chunkX) / 2;
+      const cz = (homeZ + chunkZ) / 2;
+      const angle = Math.atan2(dz, dx);
+      const halfLen = isDiag ? BRIDGE_HALF_LEN_DIAGONAL : BRIDGE_HALF_LEN_CARDINAL;
+      const halfWid = BRIDGE_HALF_WID;
+      // Flat walking height: natural ground + a slight rise so the slab
+      // reads as a raised stone path above surrounding grass.
+      const SLAB_THICK = 0.2;
+      const SLAB_RISE  = 0.15;
+      const natural = heightAt(cx, cz);
+      const y = natural + SLAB_RISE; // Finn's feet plant here
+      const bridge = {
+        cx, cz, halfLen, halfWid,
+        cos: Math.cos(angle), sin: Math.sin(angle),
+        y, chunkId: chunk.id,
+      };
+      bridges.push(bridge);
+      // Stone slab visual — long-axis along world-x in local space, rotated
+      // by -angle so local-x ends up pointing in the dock direction. Slab
+      // center sits so its top aligns with `y` (Finn's walking surface).
+      const slab = new THREE.Mesh(
+        new THREE.BoxGeometry(halfLen * 2, SLAB_THICK, halfWid * 2),
+        new THREE.MeshLambertMaterial({ color: 0xa69989 })
+      );
+      slab.position.set(cx, y - SLAB_THICK / 2, cz);
+      slab.rotation.y = -angle;
+      slab.receiveShadow = true;
+      slab.castShadow = true;
+      scene.add(slab);
+      bridge.mesh = slab;
+      chunk.bridge = bridge;
+      return bridge;
+    }
+
     // ---- Per-chunk GLB props (family-specific trees / rocks / bushes) ----
     // Shared GLB cache so a given asset is fetched + parsed once even if
     // several chunks reuse it. Sway (for foliage) is also applied once per URL.
@@ -1591,6 +1676,7 @@
       if (c === chunk0 || c.groundCover) continue;
       const r = regions.find((rg) => rg.chunkId === c.id);
       dressChunkGroundCover(c, r);
+      buildBridgeForChunk(c);
     }
     queueMicrotask(() => {
       for (const c of chunks) {

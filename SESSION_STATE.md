@@ -1,4 +1,4 @@
-# Session State — 2026-04-20
+# Session State — 2026-04-20 (late)
 
 Brief for picking up this project cold. For full context read `WORLD_PLAN.md` then `FACTORY_PLAN.md`. The latest commit on `main` is the authoritative source; this doc summarizes the shape of the live codebase.
 
@@ -24,8 +24,14 @@ The whole interactive loop is in place end-to-end: Leo walks up to a campfire, a
 - `findChunkAt(x, z)` + `isBlocked(x, z)` route through the registry. Anywhere outside every chunk is impassable.
 - `buildChunkMesh(chunk)` generates a chunk's terrain mesh with vertex-color palette baked in. Used for chunk 0 at load and for every spawned chunk.
 - Chunk 0 is the home prairie (180×180 at origin). Contains the campfire, Whispering Woods bridge vignette, Quiet Overlook.
-- Dynamic chunks are 50×50 at 8 fixed docks around chunk 0 (cardinal + diagonal at distance 125). 10-unit impassable gap between home and each dock.
+- Dynamic chunks are 50×50 at 8 fixed docks around chunk 0 (cardinal + diagonal at distance 125). The 10-unit gap between home and each dock is spanned by a walkable stone-slab bridge (see Bridges below); impassable outside chunks AND outside bridges.
 - `pickFreeChunkDock()` returns the next unclaimed dock.
+
+### Bridges (walkable connectors)
+- `bridges[]` — oriented-rectangle registry. Each entry has `cx, cz, halfLen, halfWid, cos, sin, y, chunkId, mesh`.
+- `findBridgeAt(x, z)` does rotated-rect containment. `isBlocked` falls through to it when off-chunk; `heightAt` returns `bridge.y` on-bridge so Finn walks a flat path.
+- `buildBridgeForChunk(chunk)` creates the stone slab mesh (BoxGeometry) at the midpoint between home's nearest edge/corner and the chunk's nearest edge/corner. Cardinal docks get halfLen=6 slabs; diagonals get halfLen=9 slabs at ±π/4. Slab top aligns with `bridge.y` (which is natural noise height + 0.15 rise) so the path reads as raised stone.
+- Created in `spawnRegion` right after `buildChunkMesh(newChunk)` (visible during drop-in; chunk tweens up to meet it), and in the restore-path dressing loop.
 
 ### Regions + templates
 - `regions[]` registry, each with `template`, `center`, `params`, `topic`, `topicKey`, `family`, `subNpcs`, `chunkId`.
@@ -86,8 +92,7 @@ The whole interactive loop is in place end-to-end: Leo walks up to a campfire, a
 
 ## Known open items (carry forward)
 
-- **No biome GLB props on spawned chunks** — procedural grass/flowers/pebbles are in (family-tinted), but Quaternius trees/bushes/rocks still only scatter on the home prairie. Next polish step could fan those across dynamic chunks with family-specific prop lists (oak/birch for wooded, boulders for earthen, etc.).
-- **Impassable gap between chunks** — fast-travel via Map bridges this for now. W4d-4+ could add walkable connectors (bridges, portals) or a seamless transition.
+- **Map view doesn't draw bridges** — they're walkable but invisible on the minimap, so the "path between islands" story is only readable from world view. Easy follow-up: draw a thin line on the Map for each bridge.
 - **All docks full at 8 chunks** — second ring / chunk removal not yet handled. Warn + no-op currently.
 - **Ambient audio disabled** — flat pink noise read as airplane drone. Infrastructure kept; needs better source (wind gusts, per-biome loops).
 - **Procedural dialogue is flat** — synthesized lines are templated stand-ins until W5 LLM integration.
@@ -116,4 +121,7 @@ The whole interactive loop is in place end-to-end: Leo walks up to a campfire, a
 
 ## Latest commit
 
-Run `git log --oneline -1` for current. Recent work: W4-polish — per-family ground cover (FAMILY_SKIN) so spawned chunks' terrain + scatter colors reflect the topic.
+Run `git log --oneline -5` for current. Evening polish run (in order):
+1. `W4-polish: per-family ground cover for spawned chunks` — FAMILY_SKIN + dressChunkGroundCover.
+2. `W4-polish: family-specific GLB props on spawned chunks` — FAMILY_SKIN.props + loadGLBOnce + dressChunkProps.
+3. `W4-polish: walkable connector bridges between home and chunks` — bridges[] registry, isBlocked/heightAt patches, buildBridgeForChunk.
