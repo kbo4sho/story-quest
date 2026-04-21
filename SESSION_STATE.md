@@ -40,8 +40,15 @@ The whole interactive loop is in place end-to-end: Leo walks up to a campfire, a
 ### Topic dispatcher
 - `resolveTopicFamily(topicString)` keyword-matches into earthen / watery / wooded / airy / default.
 - `FAMILY_CONFIGS` picks template + params per family (earthen → CLIFF, watery → BASIN, wooded/default → MOUND, airy → tall CLIFF).
+- `FAMILY_SKIN` overrides ground palette + grass/pebble colors + scatter density per family — merged over `biome` via `makeChunkBiome(family)` so every spawned chunk's terrain color AND ground cover reflects its topic.
 - `FAMILY_NAMES` is a per-family name pool for synthesized NPCs.
 - `resolveTopic(topicString)` returns `{ family, template, params, content: { name, npcName, lines } }`.
+
+### Per-chunk ground cover
+- `dressChunkGroundCover(chunk, region)` scatters grass/flowers/pebbles inside a single chunk using per-family materials (cached in `familyGroundMats`) and a deterministic per-chunk RNG seeded from the chunk's offset — so save/restore reproduces the same layout without persisting positions.
+- Skips `isBlocked(x, z)` cells (basin carves, cliff walls) and a clearance circle of `params.radius + 1` around the region center so the NPC isn't buried.
+- Called from `spawnRegion`'s drop-in tween complete callback, and from a restore-time pass after the scatter helpers are defined (ordering matters — helpers close over `grassTuftMat`/`pebbleMat`).
+- Home chunk still uses the original module-level `scatter()` + shared materials.
 
 ### Spawn flow
 - `spawnRegion(topicString)`:
@@ -79,7 +86,7 @@ The whole interactive loop is in place end-to-end: Leo walks up to a campfire, a
 
 ## Known open items (carry forward)
 
-- **Chunks have no ground cover** (grass tufts, flowers, pebbles) — only the home prairie does. Spawned chunks are bare except for the region's content. Polish pass can scatter props per chunk.
+- **No biome GLB props on spawned chunks** — procedural grass/flowers/pebbles are in (family-tinted), but Quaternius trees/bushes/rocks still only scatter on the home prairie. Next polish step could fan those across dynamic chunks with family-specific prop lists (oak/birch for wooded, boulders for earthen, etc.).
 - **Impassable gap between chunks** — fast-travel via Map bridges this for now. W4d-4+ could add walkable connectors (bridges, portals) or a seamless transition.
 - **All docks full at 8 chunks** — second ring / chunk removal not yet handled. Warn + no-op currently.
 - **Ambient audio disabled** — flat pink noise read as airplane drone. Infrastructure kept; needs better source (wind gusts, per-biome loops).
@@ -109,4 +116,4 @@ The whole interactive loop is in place end-to-end: Leo walks up to a campfire, a
 
 ## Latest commit
 
-As of this doc: `debc00b` — "W4d-3: new questions spawn dedicated chunks adjacent to home". Run `git log --oneline -1` for current.
+Run `git log --oneline -1` for current. Recent work: W4-polish — per-family ground cover (FAMILY_SKIN) so spawned chunks' terrain + scatter colors reflect the topic.
