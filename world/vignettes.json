@@ -1,0 +1,364 @@
+[
+  {
+    "match": ["electric", "lightning", "edison", "tesla", "current", "wire", "bulb", "circuit"],
+    "vignette": {
+      "region_name": "Edison's Workshop",
+      "family": "earthen",
+      "terrain": [
+        { "op": "plateau", "position": { "angleDeg": 0, "radius": 0 }, "radius": 11, "height": 2.6, "flatRatio": 0.7 },
+        { "op": "ridge", "from": { "angleDeg": 200, "radius": 4 }, "to": { "angleDeg": 200, "radius": 9 }, "width": 1.0, "height": 0.6 }
+      ],
+      "set_pieces": [
+        { "type": "slab",     "position": { "angleDeg": 30,  "radius": 4 },  "scale": [3.2, 0.4, 1.5], "color": 8479287 },
+        { "type": "glow_orb", "position": { "angleDeg": 30,  "radius": 4 },  "y": 1.2, "scale": 0.32, "color": 16770730, "intensity": 1.1 },
+        { "type": "glow_orb", "position": { "angleDeg": 50,  "radius": 4 },  "y": 1.2, "scale": 0.28, "color": 16770730, "intensity": 1.1 },
+        { "type": "pillar",   "position": { "angleDeg": 215, "radius": 6 },  "scale": [0.35, 4.5, 0.35], "color": 8421519 },
+        { "type": "crystal",  "position": { "angleDeg": 215, "radius": 6 },  "y": 4.6, "scale": 0.55, "color": 11197695, "glow": true },
+        { "type": "pillar",   "position": { "angleDeg": 195, "radius": 6 },  "scale": [0.18, 1.6, 0.18], "color": 5658198 },
+        { "type": "glow_orb", "position": { "angleDeg": 195, "radius": 6 },  "y": 1.7, "scale": 0.22, "color": 11197695, "intensity": 0.8 },
+        { "type": "mound",    "position": { "angleDeg": 70,  "radius": 7 },  "scale": 0.5, "color": 5658198 },
+        { "type": "mound",    "position": { "angleDeg": 80,  "radius": 6.4 }, "scale": 0.4, "color": 5658198 },
+        { "type": "flag",     "position": { "angleDeg": 320, "radius": 7 },  "scale": 2.2, "color": 4886754 }
+      ],
+      "cast": [
+        {
+          "name": "Thomas Edison",
+          "role_short": "inventor",
+          "position": { "angleDeg": 0, "radius": 0 },
+          "appearance": { "costume": "inventor", "tint": 14211232 },
+          "dialogue": [
+            "Oh, hello! I'm Thomas. Come in — watch your step on those wires.",
+            "I spend my days making things that run on electricity. See these glass bulbs?",
+            "Inside each one is a tiny thread. When electricity flows through it, the thread gets so hot it glows — like a little captured sun.",
+            "Electricity is tiny, tiny pieces called electrons, all pushing each other along a wire.",
+            "Try flipping that switch over there. Watch what happens."
+          ]
+        },
+        {
+          "name": "Nikola Tesla",
+          "role_short": "engineer",
+          "position": { "angleDeg": 215, "radius": 7 },
+          "appearance": {
+            "model": "wren", "tint": 12500670, "scale": 1.02,
+            "outfit": [
+              { "kind": "lab_coat", "color": 16316664 },
+              { "kind": "goggles", "color": 3815448, "lensColor": 11197695 }
+            ],
+            "accent": { "type": "glow", "color": 11197695 }
+          },
+          "dialogue": [
+            "Hello, friend. Thomas is clever, but he and I argue about HOW to send electricity.",
+            "His way pushes it straight through, always the same direction. Mine zigzags — back, forth, back, forth.",
+            "My way, called AC, can travel very far without losing its strength.",
+            "That's how power gets from a big waterfall all the way to your bedroom lamp.",
+            "Both our ideas matter. Science grows when people share what they learn."
+          ]
+        },
+        {
+          "name": "Benjamin Franklin",
+          "role_short": "early experimenter",
+          "position": { "angleDeg": 320, "radius": 6 },
+          "appearance": {
+            "model": "knight", "tint": 13816530, "scale": 1.05,
+            "outfit": [
+              { "kind": "wide_brim_hat", "color": 4209472, "bandColor": 3158064 },
+              { "kind": "satchel", "color": 4209472, "side": "left" }
+            ]
+          },
+          "dialogue": [
+            "Ah, a curious one! I'm Ben. I was asking about electricity long before these two.",
+            "A long time ago, people thought lightning was a mystery of the gods.",
+            "I tied a key to a kite string one stormy afternoon. Very risky — don't YOU try it!",
+            "The sparks told me lightning is the same thing as the little zap you feel from a doorknob.",
+            "Every big idea starts with someone brave enough to ask: what IS that, really?"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "match": ["ocean", "sea", "wave", "fish", "whale", "dolphin", "shark", "tide", "marine"],
+    "vignette": {
+      "region_name": "The Tide Pool",
+      "family": "watery",
+      "terrain": [
+        { "op": "plateau", "position": { "angleDeg": 0,   "radius": 0 }, "radius": 12, "height": 1.2, "flatRatio": 0.8 },
+        { "op": "pit",     "position": { "angleDeg": 90,  "radius": 6 }, "radius": 5,  "depth": 1.6 },
+        { "op": "pit",     "position": { "angleDeg": 60,  "radius": 8.5 }, "radius": 1.8, "depth": 0.4 },
+        { "op": "pit",     "position": { "angleDeg": 130, "radius": 8 }, "radius": 1.4, "depth": 0.3 }
+      ],
+      "set_pieces": [
+        { "type": "pool",   "position": { "angleDeg": 90,  "radius": 6 },   "scale": 4.5, "color": 4044706, "opacity": 0.85 },
+        { "type": "pool",   "position": { "angleDeg": 60,  "radius": 8.5 }, "scale": 1.5, "color": 4044706, "opacity": 0.85 },
+        { "type": "pool",   "position": { "angleDeg": 130, "radius": 8 },   "scale": 1.2, "color": 4044706, "opacity": 0.85 },
+        { "type": "mound",  "position": { "angleDeg": 80,  "radius": 9.5 }, "scale": 0.55, "color": 13816418 },
+        { "type": "mound",  "position": { "angleDeg": 100, "radius": 9.5 }, "scale": 0.45, "color": 15783786 },
+        { "type": "mound",  "position": { "angleDeg": 60,  "radius": 9.0 }, "scale": 0.35, "color": 15783786 },
+        { "type": "mound",  "position": { "angleDeg": 130, "radius": 8.5 }, "scale": 0.5,  "color": 13816418 },
+        { "type": "pillar", "position": { "angleDeg": 95,  "radius": 4 },   "scale": [0.12, 1.4, 0.12], "color": 4297779 },
+        { "type": "pillar", "position": { "angleDeg": 80,  "radius": 4.5 }, "scale": [0.12, 1.6, 0.12], "color": 4297779 },
+        { "type": "pillar", "position": { "angleDeg": 105, "radius": 4.2 }, "scale": [0.12, 1.5, 0.12], "color": 4297779 },
+        { "type": "slab",   "position": { "angleDeg": 215, "radius": 7 },   "scale": [2.2, 0.4, 1.0], "color": 6642515, "rotationDeg": 30 },
+        { "type": "pillar", "position": { "angleDeg": 215, "radius": 7 },   "y": 0.2, "scale": [0.1, 2.2, 0.1], "color": 6642515 }
+      ],
+      "cast": [
+        {
+          "name": "Dr. Amara",
+          "role_short": "marine biologist",
+          "position": { "angleDeg": 0, "radius": 0 },
+          "appearance": { "costume": "scientist", "tint": 14411500 },
+          "dialogue": [
+            "Hi! I'm Dr. Amara. I study the ocean — every creature, every current.",
+            "Did you know the sea covers most of our planet? More than the land does.",
+            "Down deep, it's dark and cold, but glowing fish make their own light.",
+            "Up here in the shallow pools, you'll find tiny crabs, anemones, and starfish.",
+            "Look closely — the more you watch, the more the ocean shows you."
+          ]
+        },
+        {
+          "name": "Echo",
+          "role_short": "dolphin",
+          "position": { "angleDeg": 90, "radius": 7 },
+          "appearance": { "model": "frog", "tint": 6262248, "scale": 1.0 },
+          "dialogue": [
+            "Click-click! Hi there! I'm Echo. I'm a dolphin.",
+            "We dolphins talk to each other with whistles and clicks.",
+            "Every dolphin in my pod has its own special whistle — like a name.",
+            "We help each other hunt, and we play together. The ocean is our playground.",
+            "Want to swim? I'll show you the kelp forest!"
+          ]
+        },
+        {
+          "name": "Captain Suri",
+          "role_short": "old fisher",
+          "position": { "angleDeg": 215, "radius": 7 },
+          "appearance": { "costume": "sailor", "tint": 13684960, "scale": 1.05 },
+          "dialogue": [
+            "Aye, hello there. I've sailed these waters fifty years.",
+            "The sea changes every day. Some mornings calm as glass, some afternoons tall and angry.",
+            "But she gives us food, and weather, and salt for our soup.",
+            "We must be gentle with her. Take only what we need.",
+            "Listen to the waves long enough, and you'll hear stories the land has forgotten."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "match": ["volcano", "lava", "magma", "eruption", "pele"],
+    "vignette": {
+      "region_name": "Volcano's Edge",
+      "family": "earthen",
+      "terrain": [
+        { "op": "cone",    "position": { "angleDeg": 270, "radius": 5 }, "radius": 9, "height": 5.5 },
+        { "op": "pit",     "position": { "angleDeg": 270, "radius": 5 }, "radius": 3, "depth": 3.5 },
+        { "op": "plateau", "position": { "angleDeg": 90,  "radius": 5 }, "radius": 6, "height": 1.5, "flatRatio": 0.7 },
+        { "op": "ridge",   "from": { "angleDeg": 30, "radius": 6 }, "to": { "angleDeg": 60, "radius": 8 }, "width": 2, "height": 1.0 }
+      ],
+      "set_pieces": [
+        { "type": "pool",   "position": { "angleDeg": 270, "radius": 5 }, "scale": 2.8, "color": 16219136, "glow": true, "opacity": 0.95 },
+        { "type": "pool",   "position": { "angleDeg": 290, "radius": 9 }, "scale": 1.4, "color": 16219136, "glow": true, "opacity": 0.9 },
+        { "type": "pillar", "position": { "angleDeg": 260, "radius": 7.5 }, "scale": [0.6, 4.0, 0.6], "color": 12961221 },
+        { "type": "pillar", "position": { "angleDeg": 280, "radius": 8.5 }, "scale": [0.5, 3.5, 0.5], "color": 12961221 },
+        { "type": "mound",  "position": { "angleDeg": 100, "radius": 8 }, "scale": 0.8, "color": 4471619 },
+        { "type": "mound",  "position": { "angleDeg": 115, "radius": 7.5 }, "scale": 0.7, "color": 4471619 },
+        { "type": "mound",  "position": { "angleDeg": 85,  "radius": 8.5 }, "scale": 0.6, "color": 4471619 },
+        { "type": "mound",  "position": { "angleDeg": 30,  "radius": 8 }, "scale": 0.55, "color": 6118749 },
+        { "type": "crystal","position": { "angleDeg": 30,  "radius": 8.5 }, "y": 0.6, "scale": 0.4, "color": 14366500, "glow": true },
+        { "type": "flag",   "position": { "angleDeg": 0,   "radius": 7 }, "scale": 2.0, "color": 14366500 }
+      ],
+      "cast": [
+        {
+          "name": "Dr. Kai",
+          "role_short": "vulcanologist",
+          "position": { "angleDeg": 90, "radius": 5 },
+          "appearance": {
+            "costume": "scientist", "tint": 16447968,
+            "outfit": [
+              { "kind": "lab_coat", "color": 16316664 },
+              { "kind": "wide_brim_hat", "color": 6308875, "bandColor": 16219136 },
+              { "kind": "tool", "color": 6308875, "headColor": 16762775, "side": "right" }
+            ]
+          },
+          "dialogue": [
+            "Welcome! I'm Dr. Kai. I study volcanoes for a living.",
+            "Underneath us, deep down, the rock is so hot it MELTS. We call that melted rock magma.",
+            "When pressure builds, magma pushes up and out. Then it's called lava.",
+            "Volcanoes scare people, but they also build new land. Every Hawaiian island grew from one.",
+            "My instruments listen to the mountain's heartbeat. Right now, she's calm."
+          ]
+        },
+        {
+          "name": "Pele",
+          "role_short": "fire goddess",
+          "position": { "angleDeg": 210, "radius": 6 },
+          "appearance": { "costume": "fire_goddess" },
+          "dialogue": [
+            "Aloha, little one. I am Pele. The Hawaiian people have told stories about me for a very long time.",
+            "They say I live inside the volcano. When she erupts, it is me dancing.",
+            "Long-ago people did not have Dr. Kai's instruments. They told stories to remember.",
+            "Stories and science both teach us — they are two ways of looking at the same wonder.",
+            "Be respectful of fire, child. It can warm you, and it can change a whole island."
+          ]
+        },
+        {
+          "name": "Noa",
+          "role_short": "village child",
+          "position": { "angleDeg": 100, "radius": 6 },
+          "appearance": {
+            "model": "finn", "tint": 16770730, "scale": 0.72,
+            "outfit": [{ "kind": "satchel", "color": 7948609, "side": "right" }]
+          },
+          "dialogue": [
+            "Hi! I'm Noa. I live in the village down the slope.",
+            "My grandma says the soil here is the BEST for growing taro and sweet potato.",
+            "It's because of old lava. When it cools, it breaks down into super-rich dirt.",
+            "So even though volcanoes are scary sometimes, they feed us too.",
+            "Want to come pick fruit? My family always has extra."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "match": ["dinosaur", "fossil", "trex", "rex", "prehistoric", "paleontolog", "jurassic"],
+    "vignette": {
+      "region_name": "The Bone Quarry",
+      "family": "earthen",
+      "terrain": [
+        { "op": "plateau", "position": { "angleDeg": 0,   "radius": 0 }, "radius": 12, "height": 1.0, "flatRatio": 0.85 },
+        { "op": "pit",     "position": { "angleDeg": 0,   "radius": 4 }, "radius": 3.0, "depth": 1.5 },
+        { "op": "pit",     "position": { "angleDeg": 100, "radius": 8 }, "radius": 2.5, "depth": 0.7 },
+        { "op": "ridge",   "from": { "angleDeg": 220, "radius": 5 }, "to": { "angleDeg": 250, "radius": 9 }, "width": 1.8, "height": 0.6 }
+      ],
+      "set_pieces": [
+        { "type": "slab",   "position": { "angleDeg": 0,   "radius": 4 }, "scale": [2.5, 0.4, 2.5], "color": 9326419 },
+        { "type": "pillar", "position": { "angleDeg": 0,   "radius": 4 }, "y": 0.2, "scale": [0.18, 2.2, 0.18], "color": 15916498 },
+        { "type": "pillar", "position": { "angleDeg": 15,  "radius": 3.7 }, "y": 0.2, "scale": [0.18, 1.8, 0.18], "color": 15916498 },
+        { "type": "pillar", "position": { "angleDeg": 350, "radius": 3.7 }, "y": 0.2, "scale": [0.16, 1.6, 0.16], "color": 15916498 },
+        { "type": "mound",  "position": { "angleDeg": 0,   "radius": 4 }, "y": 2.5, "scale": 0.55, "color": 16053492 },
+        { "type": "pillar", "position": { "angleDeg": 100, "radius": 8 }, "scale": [0.4, 1.4, 1.8], "color": 11825753, "rotation": [0, 0, 90] },
+        { "type": "pillar", "position": { "angleDeg": 115, "radius": 8 }, "scale": [0.35, 1.2, 1.6], "color": 11825753, "rotation": [0, 30, 90] },
+        { "type": "mound",  "position": { "angleDeg": 220, "radius": 8 }, "scale": 0.7, "color": 9326419 },
+        { "type": "mound",  "position": { "angleDeg": 235, "radius": 8.5 }, "scale": 0.5, "color": 9326419 },
+        { "type": "flag",   "position": { "angleDeg": 320, "radius": 7 }, "scale": 2.0, "color": 14366500 }
+      ],
+      "cast": [
+        {
+          "name": "Dr. Lin",
+          "role_short": "paleontologist",
+          "position": { "angleDeg": 60, "radius": 5 },
+          "appearance": { "costume": "archeologist", "tint": 14934190 },
+          "dialogue": [
+            "Welcome to the dig site! I'm Dr. Lin. I find dinosaur bones for a living.",
+            "These rocks around us are very, very old. Older than ANY animal alive today.",
+            "Sometimes when an animal died, mud covered it just right, and over millions of years it turned to stone.",
+            "We call those stone bones FOSSILS. They're like nature's photographs.",
+            "Every fossil teaches us a little more about how dinosaurs lived."
+          ]
+        },
+        {
+          "name": "Rex",
+          "role_short": "tyrannosaurus",
+          "position": { "angleDeg": 180, "radius": 7 },
+          "appearance": { "model": "frog", "tint": 9923125, "scale": 1.4 },
+          "dialogue": [
+            "ROAR! Don't be scared, I'm friendly. I'm a T-Rex.",
+            "I had teeth as long as bananas. Big ones. For eating other dinosaurs.",
+            "But my arms? Tiny! I bet I couldn't reach my own snack.",
+            "I lived a long, long time ago — about sixty-six MILLION years.",
+            "Then a huge rock from space crashed into Earth, and most of us couldn't survive."
+          ]
+        },
+        {
+          "name": "Trixie",
+          "role_short": "triceratops",
+          "position": { "angleDeg": 290, "radius": 6 },
+          "appearance": { "model": "frog", "tint": 7187574, "scale": 1.1 },
+          "dialogue": [
+            "Hello! I'm Trixie. Three horns, big bony frill. See?",
+            "Don't worry — I only ate plants. Lots and lots of leaves and ferns.",
+            "My horns weren't for eating. They were for protecting my babies from fellas like Rex over there.",
+            "Some dinosaurs, like the small fast ones, became BIRDS. Yes, really!",
+            "Next time you see a robin, give a little wave to a tiny dinosaur cousin."
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "match": ["space", "planet", "star", "moon", "galaxy", "rocket", "astronaut", "orbit", "cosmos"],
+    "vignette": {
+      "region_name": "Stargazer's Hill",
+      "family": "airy",
+      "terrain": [
+        { "op": "dome",    "position": { "angleDeg": 0, "radius": 0 }, "radius": 14, "height": 4.5 },
+        { "op": "plateau", "position": { "angleDeg": 0, "radius": 0 }, "radius": 4,  "height": 4.8, "flatRatio": 0.7 },
+        { "op": "ridge",   "from": { "angleDeg": 230, "radius": 5 }, "to": { "angleDeg": 230, "radius": 10 }, "width": 1.2, "height": 0.4 }
+      ],
+      "set_pieces": [
+        { "type": "slab",    "position": { "angleDeg": 0,   "radius": 4 }, "scale": [1.6, 0.4, 1.0], "color": 5650728 },
+        { "type": "pillar",  "position": { "angleDeg": 0,   "radius": 4 }, "y": 0.4, "scale": [0.5, 2.0, 0.5], "color": 4144959, "rotation": [0, 0, 35] },
+        { "type": "crystal", "position": { "angleDeg": 0,   "radius": 5.2 }, "y": 1.6, "scale": 0.35, "color": 7895160, "glow": true },
+        { "type": "glow_orb","position": { "angleDeg": 90,  "radius": 5 }, "y": 6.0, "scale": 0.32, "color": 16777164, "intensity": 1.2 },
+        { "type": "glow_orb","position": { "angleDeg": 145, "radius": 6 }, "y": 7.0, "scale": 0.28, "color": 11197695, "intensity": 1.0 },
+        { "type": "glow_orb","position": { "angleDeg": 205, "radius": 5.5 }, "y": 6.5, "scale": 0.24, "color": 16762775, "intensity": 1.0 },
+        { "type": "glow_orb","position": { "angleDeg": 30,  "radius": 6 }, "y": 7.5, "scale": 0.30, "color": 16777164, "intensity": 1.1 },
+        { "type": "glow_orb","position": { "angleDeg": 270, "radius": 5.5 }, "y": 6.0, "scale": 0.26, "color": 11197695, "intensity": 1.0 },
+        { "type": "pillar",  "position": { "angleDeg": 235, "radius": 8 }, "scale": [0.9, 1.6, 0.9], "color": 11763276 },
+        { "type": "crystal", "position": { "angleDeg": 235, "radius": 8 }, "y": 1.7, "scale": 0.5, "color": 16229954 },
+        { "type": "flag",    "position": { "angleDeg": 305, "radius": 6 }, "scale": 2.4, "color": 4886754 }
+      ],
+      "cast": [
+        {
+          "name": "Galileo",
+          "role_short": "astronomer",
+          "position": { "angleDeg": 60, "radius": 4 },
+          "appearance": {
+            "model": "wren", "tint": 12894378, "scale": 1.05,
+            "outfit": [
+              { "kind": "cape", "color": 1845326 },
+              { "kind": "goggles", "color": 1845326, "lensColor": 16777164 }
+            ]
+          },
+          "dialogue": [
+            "Buongiorno! I am Galileo. Four hundred years ago, I built one of the first telescopes.",
+            "I pointed it at the night sky and saw things no one had seen before.",
+            "Jupiter has its own moons! Four of them, dancing around the planet.",
+            "And our own Moon is not smooth — it has mountains and craters, just like Earth.",
+            "Always look up, child. The sky has more secrets than any book."
+          ]
+        },
+        {
+          "name": "Mae",
+          "role_short": "astronaut",
+          "position": { "angleDeg": 170, "radius": 5 },
+          "appearance": { "costume": "astronaut" },
+          "dialogue": [
+            "Hi! I'm Mae. I went to space on a rocket ship.",
+            "From up there, Earth is the most beautiful blue marble. No borders, no countries — just one planet.",
+            "There's no air in space, so we wear special suits. And we float! Even our food floats.",
+            "Galileo dreamed of seeing the stars closer. We get to actually GO.",
+            "Every kid who looks up could be the next person on Mars. Maybe you."
+          ]
+        },
+        {
+          "name": "Spark",
+          "role_short": "Mars rover",
+          "position": { "angleDeg": 235, "radius": 8 },
+          "appearance": {
+            "model": "frog", "tint": 13386513, "scale": 1.0,
+            "accent": { "type": "halo", "color": 16762775 }
+          },
+          "dialogue": [
+            "Beep boop! Hi there! I'm Spark. I'm a robot on Mars.",
+            "Mars is red and dusty and cold. No people live here — just me and my rover friends.",
+            "I drive around very slowly, taking pictures and digging in the dirt.",
+            "Scientists on Earth watch through my eyes. They look for tiny clues that life once lived here.",
+            "Maybe one day a real astronaut will come visit. I'll save them a parking spot!"
+          ]
+        }
+      ]
+    }
+  }
+]

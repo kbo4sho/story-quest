@@ -420,6 +420,31 @@
       return chunk;
     }
 
+    // Rebuild a chunk's mesh in place — used after a vignette with custom
+    // terrain ops arrives, so the actual ground geometry reflects the ops
+    // instead of the template default that was baked at chunk-creation time.
+    // Removes the prior mesh from the scene and disposes its GPU resources,
+    // then re-runs buildChunkMesh with the latest heightAt() values.
+    function rebuildChunkMesh(chunk) {
+      if (!chunk) return;
+      if (chunk.mesh) {
+        scene.remove(chunk.mesh);
+        if (chunk.geometry) chunk.geometry.dispose();
+        if (chunk.mesh.material && chunk.mesh.material.dispose) chunk.mesh.material.dispose();
+      }
+      chunk.mesh = null;
+      chunk.geometry = null;
+      buildChunkMesh(chunk);
+      // Reseat any ground cover (grass / flowers / pebbles / GLB props) that
+      // was scattered against the previous terrain — they sample heightAt
+      // here so they land on the new surface instead of floating / sinking.
+      if (Array.isArray(chunk.groundCover)) {
+        for (const obj of chunk.groundCover) {
+          obj.position.y = heightAt(obj.position.x, obj.position.z);
+        }
+      }
+    }
+
     // Per-chunk dimensions for dynamically-spawned chunks (also used by
     // savedState restore to rebuild prior-session chunks).
     const DYNAMIC_CHUNK_SIZE = 50;
@@ -431,10 +456,156 @@
     // terrain mesh is generated so heightAt carves correctly.
     const regions = [];
 
+    // ---- W5: vignette-authored terrain ops ----
+    // A vignette can carry a `terrain` array of compositional shape ops
+    // ("dome", "plateau", "pit", "basin", "ridge", "trench"). When present,
+    // the region's effective terrainDelta is the SUM of these ops, computed
+    // in vignetteTerrainDelta() — and the region's template delta is bypassed
+    // for that region (the vignette has full control). All op positions are
+    // polar (angleDeg + radius) from the region center, matching the
+    // set_pieces / cast convention so vignette authoring stays uniform.
+
+    // Smoothstep: 0..1 → 0..1, gentle ease in/out (3t² − 2t³).
+    function _ss(t) { return t * t * (3 - 2 * t); }
+
+    const TERRAIN_OPS = {
+      // Smooth bell-shaped hill. Same shape as TEMPLATE_MOUND.
+      dome(p, dx, dz) {
+        const r = Math.max(0.001, Number(p.radius) || 4);
+        const h = Number(p.height) || 1;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r * r) return 0;
+        const t = 1 - d2 / (r * r);
+        return t * t * h;
+      },
+      // Flat-top hill. flatRatio (0..1) is the fraction of radius that's flat.
+      plateau(p, dx, dz) {
+        const r = Math.max(0.001, Number(p.radius) || 4);
+        const h = Number(p.height) || 1;
+        const flat = Math.max(0, Math.min(0.95, Number(p.flatRatio) || 0.5));
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r * r) return 0;
+        const inner = r * flat;
+        if (d2 <= inner * inner) return h;
+        const d = Math.sqrt(d2);
+        const t = 1 - (d - inner) / (r - inner);
+        return t * t * h;
+      },
+      // Sharp peak. Steeper than dome, cone-ish.
+      cone(p, dx, dz) {
+        const r = Math.max(0.001, Number(p.radius) || 3);
+        const h = Number(p.height) || 1;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r * r) return 0;
+        const d = Math.sqrt(d2);
+        return (1 - d / r) * h;
+      },
+      // Round depression. Inverse of dome.
+      pit(p, dx, dz) {
+        const r = Math.max(0.001, Number(p.radius) || 4);
+        const depth = Number(p.depth) || 1;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r * r) return 0;
+        const t = 1 - d2 / (r * r);
+        return -t * t * depth;
+      },
+      // Pit with a raised rim around it. Like a crater. rimHeight is small.
+      basin(p, dx, dz) {
+        const r = Math.max(0.001, Number(p.radius) || 5);
+        const depth = Number(p.depth) || 1.5;
+        const rim = Number(p.rimHeight) || (depth * 0.25);
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= r * r) return 0;
+        const d = Math.sqrt(d2);
+        const u = d / r; // 0 at center, 1 at rim
+        // Cosine-ish profile: deepest at center, peaks just inside the rim,
+        // back to 0 at the rim.
+        // Down phase 0..0.7 → -depth → 0 around 0.85, then small +rim near 0.92.
+        if (u < 0.7) {
+          const t = u / 0.7;
+          return -depth * (1 - _ss(t));
+        }
+        if (u < 0.92) {
+          const t = (u - 0.7) / (0.92 - 0.7);
+          return rim * Math.sin(t * Math.PI);
+        }
+        const t = (u - 0.92) / (1 - 0.92);
+        return rim * (1 - _ss(t)) * 0.0;
+      },
+      // Raised wall along a line. p needs cached _ax/_az/_bx/_bz (cartesian).
+      ridge(p, dx, dz) {
+        const ab2 = (p._abX * p._abX + p._abZ * p._abZ) || 1;
+        let t = ((dx - p._ax) * p._abX + (dz - p._az) * p._abZ) / ab2;
+        t = Math.max(0, Math.min(1, t));
+        const cx = p._ax + p._abX * t;
+        const cz = p._az + p._abZ * t;
+        const dd = (dx - cx) * (dx - cx) + (dz - cz) * (dz - cz);
+        const w = Math.max(0.1, (Number(p.width) || 1.5) / 2);
+        if (dd >= w * w) return 0;
+        const u = 1 - dd / (w * w);
+        return _ss(u) * (Number(p.height) || 1);
+      },
+      // Carved channel along a line. Inverse of ridge.
+      trench(p, dx, dz) {
+        const ab2 = (p._abX * p._abX + p._abZ * p._abZ) || 1;
+        let t = ((dx - p._ax) * p._abX + (dz - p._az) * p._abZ) / ab2;
+        t = Math.max(0, Math.min(1, t));
+        const cx = p._ax + p._abX * t;
+        const cz = p._az + p._abZ * t;
+        const dd = (dx - cx) * (dx - cx) + (dz - cz) * (dz - cz);
+        const w = Math.max(0.1, (Number(p.width) || 1.5) / 2);
+        if (dd >= w * w) return 0;
+        const u = 1 - dd / (w * w);
+        return -_ss(u) * (Number(p.depth) || 1);
+      },
+    };
+
+    // Polar (angleDeg, radius) → cartesian relative to region center.
+    function _polarToXZ(pos) {
+      if (!pos) return [0, 0];
+      const r = Math.max(0, Math.min(20, Number(pos.radius) || 0));
+      const a = ((Number(pos.angleDeg) || 0) % 360) * Math.PI / 180;
+      return [Math.cos(a) * r, Math.sin(a) * r];
+    }
+
+    // Walk a region's vignette.terrain ops, summing each one's contribution
+    // at the world point (x, z). Pre-computes cartesian offsets onto each op
+    // the first time it's seen so the per-pixel evaluation is cheap.
+    function vignetteTerrainDelta(region, x, z) {
+      const ops = region.vignette && region.vignette.terrain;
+      if (!Array.isArray(ops) || !ops.length) return 0;
+      const dx = x - region.center.x;
+      const dz = z - region.center.z;
+      let sum = 0;
+      for (let i = 0; i < ops.length; i++) {
+        const op = ops[i];
+        if (!op || !TERRAIN_OPS[op.op]) continue;
+        // Cache resolved offsets so we don't recompute trig per heightAt call.
+        if (op._cached !== true) {
+          const [cx, cz] = _polarToXZ(op.position);
+          op._cx = cx; op._cz = cz;
+          if (op.from && op.to) {
+            const [ax, az] = _polarToXZ(op.from);
+            const [bx, bz] = _polarToXZ(op.to);
+            op._ax = ax; op._az = az;
+            op._abX = bx - ax; op._abZ = bz - az;
+          }
+          op._cached = true;
+        }
+        sum += TERRAIN_OPS[op.op](op, dx - (op._cx || 0), dz - (op._cz || 0));
+      }
+      return sum;
+    }
+
     function regionTerrainDelta(x, z) {
       let d = 0;
       for (let i = 0; i < regions.length; i++) {
         const r = regions[i];
+        // Vignette terrain ops fully replace the template delta when present.
+        if (r.vignette && Array.isArray(r.vignette.terrain) && r.vignette.terrain.length) {
+          d += vignetteTerrainDelta(r, x, z);
+          continue;
+        }
         const t = r.template;
         if (t && t.terrainDelta) d += t.terrainDelta(x, z, r);
       }
@@ -535,6 +706,18 @@
         const r2 = r * r;
         const d2 = dx * dx + dz * dz;
         if (d2 >= r2) return 0;
+        // Optional flat plateau on top so vignette set pieces have somewhere
+        // level to sit. plateauRatio is the fraction of radius that's flat;
+        // 0 (default) preserves the original smooth-bell behavior so older
+        // hand-authored regions (e.g. Quiet Overlook) don't change shape.
+        const plateauRatio = region.params.plateauRatio || 0;
+        if (plateauRatio > 0) {
+          const inner = r * plateauRatio;
+          if (d2 <= inner * inner) return region.params.height;
+          const d = Math.sqrt(d2);
+          const t = 1 - (d - inner) / (r - inner);
+          return t * t * region.params.height;
+        }
         const t = 1 - d2 / r2;
         return t * t * region.params.height;
       },
@@ -599,9 +782,9 @@
     const FAMILY_CONFIGS = {
       earthen: { template: TEMPLATE_CLIFF, params: { radius: 11, height: 5.5 } },
       watery:  { template: TEMPLATE_BASIN, params: { radius: 10, depth: 2.2 } },
-      wooded:  { template: TEMPLATE_MOUND, params: { radius: 10, height: 2.8 } },
+      wooded:  { template: TEMPLATE_MOUND, params: { radius: 10, height: 2.4, plateauRatio: 0.4 } },
       airy:    { template: TEMPLATE_CLIFF, params: { radius: 9,  height: 6.5 } },
-      default: { template: TEMPLATE_MOUND, params: { radius: 9,  height: 3.0 } },
+      default: { template: TEMPLATE_MOUND, params: { radius: 9,  height: 2.6, plateauRatio: 0.45 } },
     };
 
     // Per-family chunk skin — overrides on top of the base biome so a spawned
@@ -773,6 +956,7 @@
           topic:    sp.topic,
           topicKey: sp.topicKey,
           family:   sp.family,
+          vignette: sp.vignette || null,
           subNpcs:  Array.isArray(sp.subNpcs) ? sp.subNpcs : [],
           chunkId,
           restored: true,
@@ -939,6 +1123,7 @@
               center:     { x: r.center.x, z: r.center.z },
               params:     { ...r.params },
               topic:      r.topic,
+              vignette:   r.vignette || null,
               subNpcs:    Array.isArray(r.subNpcs) ? r.subNpcs.map((s) => ({
                 id:       s.id,
                 topic:    s.topic,
@@ -1212,6 +1397,338 @@
 
     // Placed inside the async loader later (needs knightGlb + setupKayKitChar).
     let buildSubNpc = null;
+    // W5 — LLM-authored multi-NPC scene builder. Same deal: needs the kit GLBs
+    // loaded, so it's assigned from the async IIFE and read by spawnRegion and
+    // the restore loop.
+    let buildMultiNpcScene = null;
+
+    // ---- W5: LLM vignette fetch ----
+    // The Python proxy (world/llm_proxy.py, default port 3459) holds the
+    // Anthropic API key server-side and forwards vignette requests. The
+    // browser never sees the key. If the proxy is unreachable or Claude
+    // returns an error, spawnRegion falls back to the templated synthesizer
+    // so the game stays playable offline.
+    const LLM_PROXY_URL =
+      new URLSearchParams(location.search).get('proxy') ||
+      `http://${location.hostname}:3459/vignette`;
+    const LLM_TIMEOUT_MS = 30000;
+    // Explicit opt-out: `?llm=0` disables the fetch entirely (useful when
+    // developing without the proxy running — skips the 30s timeout wait).
+    const LLM_ENABLED =
+      new URLSearchParams(location.search).get('llm') !== '0';
+
+    async function fetchVignetteFromLLM(topicString) {
+      if (!LLM_ENABLED) throw new Error('llm disabled via ?llm=0');
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), LLM_TIMEOUT_MS);
+      try {
+        const res = await fetch(LLM_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: topicString }),
+          signal: ctl.signal,
+        });
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => '');
+          throw new Error(`proxy ${res.status}: ${errBody || res.statusText}`);
+        }
+        const data = await res.json();
+        if (!data || !Array.isArray(data.cast) || data.cast.length === 0) {
+          throw new Error('vignette missing cast');
+        }
+        return data;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    // A floating text sprite pinned above a chunk while the LLM thinks.
+    // Used when drop-in finishes but the vignette hasn't arrived yet, so
+    // the player sees something is happening instead of an empty hill.
+    function showSummoningLabel(chunk) {
+      const cv = document.createElement('canvas');
+      cv.width = 512; cv.height = 128;
+      const ctx = cv.getContext('2d');
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.font = 'bold 48px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(30, 20, 10, 0.55)';
+      ctx.fillText('Summoning the scene…', cv.width / 2 + 2, cv.height / 2 + 2);
+      ctx.fillStyle = 'rgba(255, 240, 180, 0.98)';
+      ctx.fillText('Summoning the scene…', cv.width / 2, cv.height / 2);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.anisotropy = 4;
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(12, 3, 1);
+      sprite.position.set(
+        chunk.offset.x,
+        heightAt(chunk.offset.x, chunk.offset.z) + 7,
+        chunk.offset.z,
+      );
+      sprite.renderOrder = 999;
+      scene.add(sprite);
+      return {
+        sprite,
+        dispose() {
+          scene.remove(sprite);
+          tex.dispose();
+          mat.dispose();
+        },
+      };
+    }
+
+    // ---- W5: set pieces ----
+    // Small library of engine primitives a vignette can place to actually
+    // furnish its scene (workbench, lava pool, telescope, etc.). Each piece
+    // is { type, position: {angleDeg, radius}, y?, scale?, rotation?, color?, ... }.
+    // position is polar from the region center; y is height above ground.
+    function _spScalar(s, def) {
+      if (typeof s === 'number') return s;
+      if (Array.isArray(s)) return (Number(s[0]) + Number(s[1]) + Number(s[2])) / 3 || def;
+      return def;
+    }
+    function _spVec3(s, dx, dy, dz) {
+      if (Array.isArray(s)) return [Number(s[0]) || dx, Number(s[1]) || dy, Number(s[2]) || dz];
+      if (typeof s === 'number') return [dx * s, dy * s, dz * s];
+      return [dx, dy, dz];
+    }
+    function _spColor(c, fallback) {
+      try { return new THREE.Color(c != null ? c : fallback); }
+      catch (e) { return new THREE.Color(fallback); }
+    }
+
+    const SET_PIECE_BUILDERS = {
+      // Glowing sphere with a soft point light. Lightbulb, lantern, star.
+      glow_orb(p) {
+        const color = _spColor(p.color, 0xffe49a);
+        const r = _spScalar(p.scale, 0.35);
+        const m = new THREE.Mesh(
+          new THREE.SphereGeometry(r, 18, 14),
+          new THREE.MeshStandardMaterial({
+            color, emissive: color,
+            emissiveIntensity: p.intensity != null ? Number(p.intensity) : 0.85,
+          }),
+        );
+        m.castShadow = false;
+        const g = new THREE.Group();
+        g.add(m);
+        const light = new THREE.PointLight(color, 0.5, 6, 2);
+        g.add(light);
+        return g;
+      },
+      // Vertical cylinder. Pole, post, bone, kelp, telescope tube.
+      pillar(p) {
+        const [sx, sy, sz] = _spVec3(p.scale, 0.18, 2.5, 0.18);
+        const m = new THREE.Mesh(
+          new THREE.CylinderGeometry(sx, sx, sy, 12),
+          new THREE.MeshLambertMaterial({ color: _spColor(p.color, 0x8a7d6f) }),
+        );
+        m.position.y = sy / 2;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        const g = new THREE.Group();
+        g.add(m);
+        return g;
+      },
+      // Box: workbench, table, gravestone, slab.
+      slab(p) {
+        const [sx, sy, sz] = _spVec3(p.scale, 2.0, 0.35, 1.2);
+        const m = new THREE.Mesh(
+          new THREE.BoxGeometry(sx, sy, sz),
+          new THREE.MeshLambertMaterial({ color: _spColor(p.color, 0x8b6f47) }),
+        );
+        m.position.y = sy / 2;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        const g = new THREE.Group();
+        g.add(m);
+        return g;
+      },
+      // Flat disc. Water, lava, magic circle. p.glow=true makes it emissive.
+      pool(p) {
+        const r = _spScalar(p.scale, 2.0);
+        const color = _spColor(p.color, 0x3a7fa8);
+        const mat = new THREE.MeshStandardMaterial({
+          color,
+          emissive: p.glow ? color : new THREE.Color(0x000000),
+          emissiveIntensity: p.glow ? 0.55 : 0,
+          transparent: true,
+          opacity: p.opacity != null ? Number(p.opacity) : 0.85,
+          side: THREE.DoubleSide,
+        });
+        const m = new THREE.Mesh(new THREE.CircleGeometry(r, 28), mat);
+        m.rotation.x = -Math.PI / 2;
+        m.position.y = 0.06;
+        const g = new THREE.Group();
+        g.add(m);
+        if (p.glow) {
+          const light = new THREE.PointLight(color, 0.7, r * 4, 2);
+          light.position.y = 0.4;
+          g.add(light);
+        }
+        return g;
+      },
+      // Hemisphere on the ground. Boulder, seashell, foundation.
+      mound(p) {
+        const r = _spScalar(p.scale, 0.6);
+        const m = new THREE.Mesh(
+          new THREE.SphereGeometry(r, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+          new THREE.MeshLambertMaterial({ color: _spColor(p.color, 0x88796a) }),
+        );
+        m.castShadow = true;
+        m.receiveShadow = true;
+        const g = new THREE.Group();
+        g.add(m);
+        return g;
+      },
+      // Faceted icosahedron. Crystal, gem. p.glow=true makes it emissive.
+      crystal(p) {
+        const r = _spScalar(p.scale, 0.45);
+        const color = _spColor(p.color, 0xb084f0);
+        const mat = p.glow
+          ? new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6 })
+          : new THREE.MeshLambertMaterial({ color });
+        const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), mat);
+        m.position.y = r;
+        m.castShadow = true;
+        const g = new THREE.Group();
+        g.add(m);
+        if (p.glow) {
+          const light = new THREE.PointLight(color, 0.4, 4, 2);
+          light.position.y = r;
+          g.add(light);
+        }
+        return g;
+      },
+      // Pole + cloth flag. Banner, pennant, marker.
+      flag(p) {
+        const g = new THREE.Group();
+        const polec = _spColor(p.poleColor, 0x6b5236);
+        const clothc = _spColor(p.color, 0xc04030);
+        const h = _spScalar(p.scale, 2.4);
+        const pole = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.05, 0.05, h, 8),
+          new THREE.MeshLambertMaterial({ color: polec }),
+        );
+        pole.position.y = h / 2;
+        pole.castShadow = true;
+        const cloth = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.9, 0.55),
+          new THREE.MeshLambertMaterial({ color: clothc, side: THREE.DoubleSide }),
+        );
+        cloth.position.set(0.45, h - 0.4, 0);
+        g.add(pole);
+        g.add(cloth);
+        return g;
+      },
+    };
+
+    // Set-piece types whose footprint is wide and flat — they need slope
+    // matching so they don't teeter on a hill. Pillars / crystals / orbs
+    // are vertical and look fine planted at the center height.
+    const SET_PIECE_FLAT = new Set(['slab', 'pool']);
+    const SET_PIECE_FOOTPRINT_AVG = new Set(['slab', 'pool', 'mound']);
+
+    // Sample heightAt across a piece's footprint and return:
+    //   y     — average ground height under the footprint (so the piece sits
+    //           half-into the upslope side rather than floating on one corner)
+    //   tiltX — rotation around the world X axis to lie flat (in radians)
+    //   tiltZ — rotation around the world Z axis to lie flat (in radians)
+    function sampleGroundUnder(x, z, halfX, halfZ) {
+      const yC  = heightAt(x, z);
+      const yPX = heightAt(x + halfX, z);
+      const yNX = heightAt(x - halfX, z);
+      const yPZ = heightAt(x, z + halfZ);
+      const yNZ = heightAt(x, z - halfZ);
+      const y = (yC + yPX + yNX + yPZ + yNZ) / 5;
+      // Slope = rise/run along each axis. Convert to tilt rotation:
+      //   ground rising in +x → top of piece must lean toward +x → rotate -Z
+      //   ground rising in +z → top of piece must lean toward +z → rotate +X
+      const slopeX = (yPX - yNX) / (2 * Math.max(halfX, 0.0001));
+      const slopeZ = (yPZ - yNZ) / (2 * Math.max(halfZ, 0.0001));
+      return {
+        y,
+        tiltX: Math.atan(slopeZ),
+        tiltZ: -Math.atan(slopeX),
+      };
+    }
+
+    // Best-effort half-extents for footprint sampling.
+    function _spFootprint(sp) {
+      const s = sp.scale;
+      if (Array.isArray(s)) return [Math.max(0.3, (Number(s[0]) || 1) / 2),
+                                    Math.max(0.3, (Number(s[2]) || 1) / 2)];
+      if (typeof s === 'number') return [Math.max(0.3, s), Math.max(0.3, s)];
+      return [1, 1];
+    }
+
+    // Walk a vignette's set_pieces array and add each one to the scene at
+    // its polar position relative to region.center. Wide flat pieces sample
+    // the terrain footprint and tilt to match the slope; vertical pieces
+    // just plant at the center height. Author-supplied rotation always wins.
+    function buildSetPieces(region, vignette) {
+      if (!vignette || !Array.isArray(vignette.set_pieces) || !vignette.set_pieces.length) return;
+      const cx = region.center.x;
+      const cz = region.center.z;
+      region.setPieces = region.setPieces || [];
+      for (const sp of vignette.set_pieces) {
+        const builder = SET_PIECE_BUILDERS[sp && sp.type];
+        if (!builder) {
+          console.warn('[set_piece] unknown type:', sp && sp.type);
+          continue;
+        }
+        const pos = sp.position || { angleDeg: 0, radius: 0 };
+        const rad = Math.max(0, Math.min(20, Number(pos.radius) || 0));
+        const theta = ((Number(pos.angleDeg) || 0) % 360) * Math.PI / 180;
+        const x = cx + Math.cos(theta) * rad;
+        const z = cz + Math.sin(theta) * rad;
+        let group;
+        try { group = builder(sp); }
+        catch (e) { console.warn('[set_piece] builder failed:', sp.type, e); continue; }
+        if (!group) continue;
+
+        const useFootprintY  = SET_PIECE_FOOTPRINT_AVG.has(sp.type);
+        const conformToSlope = SET_PIECE_FLAT.has(sp.type);
+
+        let groundY = heightAt(x, z);
+        let tiltX = 0;
+        let tiltZ = 0;
+        if (useFootprintY || conformToSlope) {
+          const [hx, hz] = _spFootprint(sp);
+          const sample = sampleGroundUnder(x, z, hx, hz);
+          if (useFootprintY) groundY = sample.y;
+          if (conformToSlope) {
+            tiltX = sample.tiltX;
+            tiltZ = sample.tiltZ;
+          }
+        }
+
+        group.position.set(x, groundY + (Number(sp.y) || 0), z);
+
+        // Author-supplied rotation overrides the auto-tilt entirely.
+        if (Array.isArray(sp.rotation)) {
+          group.rotation.set(
+            (Number(sp.rotation[0]) || 0) * Math.PI / 180,
+            (Number(sp.rotation[1]) || 0) * Math.PI / 180,
+            (Number(sp.rotation[2]) || 0) * Math.PI / 180,
+          );
+        } else if (sp.rotationDeg != null) {
+          group.rotation.y = Number(sp.rotationDeg) * Math.PI / 180;
+          if (conformToSlope) {
+            // Apply tilt around the world axes after the explicit Y rotation.
+            group.rotation.x = tiltX;
+            group.rotation.z = tiltZ;
+          }
+        } else if (conformToSlope) {
+          group.rotation.set(tiltX, 0, tiltZ);
+        }
+
+        scene.add(group);
+        region.setPieces.push(group);
+      }
+    }
 
     function deepenRegion(region, topicString) {
       if (!region.subNpcs) region.subNpcs = [];
@@ -1277,14 +1794,62 @@
       regions.push(region);
       buildChunkMesh(newChunk);
       buildBridgeForChunk(newChunk);
-      animateChunkDropIn(newChunk, 1400, () => {
-        dressChunkGroundCover(newChunk, region);
-        dressChunkProps(newChunk, region);
-        if (region.template && region.template.build) {
+
+      // Kick off the Claude vignette request in parallel with the drop-in
+      // animation. If it succeeds we build a multi-NPC scene; if it fails
+      // (proxy down, bad response, timeout) we fall back to the templated
+      // single-NPC scene so the game stays playable.
+      let dropInDone = false;
+      let vignetteSettled = false;
+      let vignetteData = null;
+      let summoning = null;
+
+      const vignettePromise = fetchVignetteFromLLM(topicString)
+        .then((data) => { vignetteData = data; })
+        .catch((err) => {
+          console.warn('[vignette] fallback — LLM unavailable:', err && err.message ? err.message : err);
+          vignetteData = null;
+        })
+        .finally(() => { vignetteSettled = true; });
+
+      function finalizeScene() {
+        if (!dropInDone || !vignetteSettled) return;
+        if (summoning) { summoning.dispose(); summoning = null; }
+        if (vignetteData && buildMultiNpcScene) {
+          region.vignette = vignetteData;
+          // Let the LLM's region_name override the templated placeholder.
+          if (vignetteData.region_name) {
+            region.topic = { ...(region.topic || {}), name: vignetteData.region_name };
+          }
+          // If the vignette specified custom terrain ops, the chunk mesh
+          // baked earlier still reflects the template default. Rebuild it
+          // now (regionTerrainDelta will see the new vignette ops and skip
+          // the template) before placing set pieces / NPCs on top.
+          if (Array.isArray(vignetteData.terrain) && vignetteData.terrain.length) {
+            rebuildChunkMesh(newChunk);
+          }
+          buildSetPieces(region, vignetteData);
+          buildMultiNpcScene(region, vignetteData, null);
+        } else if (region.template && region.template.build) {
           region.template.build(region, null);
         }
         saveState();
+      }
+
+      animateChunkDropIn(newChunk, 1400, () => {
+        dressChunkGroundCover(newChunk, region);
+        dressChunkProps(newChunk, region);
+        dropInDone = true;
+        // If the LLM is still working, surface a visible "thinking" label
+        // so the player knows the empty hill isn't a bug.
+        if (!vignetteSettled && LLM_ENABLED) {
+          summoning = showSummoningLabel(newChunk);
+        }
+        finalizeScene();
       });
+
+      vignettePromise.then(finalizeScene);
+
       updateWorldCameraBounds();
       saveState();
     }
@@ -2253,6 +2818,473 @@
       TEMPLATE_CLIFF.build = buildDynamicNpcScene;
       TEMPLATE_BASIN.build = buildDynamicNpcScene;
 
+      // W5: LLM-authored multi-NPC scene. Called when a region has a
+      // `vignette` blob (from the Claude proxy) with a `cast` array. Each
+      // cast member becomes a full npc entry with its own polar position,
+      // explicit `appearance` (model + tint + scale + accent) OR a
+      // shorthand `appearance_hint`, and a dialogue script.
+
+      // Map `appearance.model` strings → loaded GLB references.
+      const MODEL_GLBS = {
+        knight: () => knightGlb,
+        wren:   () => wrenGlb,
+        mage:   () => wrenGlb,   // alias
+        finn:   () => finnGlb,
+        rogue:  () => finnGlb,   // alias
+        frog:   () => frogGlb,
+        pip:    () => frogGlb,   // alias
+      };
+
+      // appearance_hint shorthand → defaults for {model, scale, tint}.
+      const APPEARANCE_HINT_DEFAULTS = {
+        scholar:  { model: 'wren',   scale: 1.0,  tint: 0xb8c8ff },
+        ranger:   { model: 'finn',   scale: 1.0,  tint: 0xb8e0a0 },
+        tinkerer: { model: 'knight', scale: 1.0,  tint: 0xd6a064 },
+        elder:    { model: 'knight', scale: 1.08, tint: 0xc8d0d8 },
+        child:    { model: 'finn',   scale: 0.72, tint: 0xfff0c0 },
+        wild:     { model: 'frog',   scale: 0.95, tint: null },
+      };
+
+      // Deterministic warm/cool tint derived from the NPC's name so two
+      // NPCs sharing the same model still look different.
+      function _nameTint(name) {
+        const s = String(name || 'npc');
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < s.length; i++) {
+          h ^= s.charCodeAt(i);
+          h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+        }
+        // Hue-ish shift via channel scaling. Range 0.78–1.22 per channel.
+        const r = ((h         & 0xff) / 255) * 0.44 + 0.78;
+        const g = (((h >> 8)  & 0xff) / 255) * 0.44 + 0.78;
+        const b = (((h >> 16) & 0xff) / 255) * 0.44 + 0.78;
+        return new THREE.Color(r, g, b);
+      }
+
+      // Multiply a color tint into every mesh material in the cloned scene.
+      // Materials are cloned per NPC so we don't mutate the shared GLB.
+      function _applyTint(root, tintColor) {
+        if (!tintColor) return;
+        root.traverse((n) => {
+          if (n.isMesh && n.material) {
+            const mats = Array.isArray(n.material) ? n.material : [n.material];
+            const cloned = mats.map((m) => {
+              const c = m.clone();
+              if (c.color) c.color.multiply(tintColor);
+              return c;
+            });
+            n.material = cloned.length === 1 ? cloned[0] : cloned;
+          }
+        });
+      }
+
+      // Optional accent — small visual differentiator stuck on the NPC.
+      // halo: glowing ring above the head; glow: gentle point light.
+      function _attachAccent(group, accent) {
+        if (!accent || !accent.type) return;
+        const color = new THREE.Color(accent.color != null ? accent.color : 0xffe49a);
+        if (accent.type === 'halo') {
+          const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(0.32, 0.05, 8, 24),
+            new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.9 }),
+          );
+          ring.rotation.x = Math.PI / 2;
+          ring.position.y = 2.05;
+          group.add(ring);
+        } else if (accent.type === 'glow') {
+          const light = new THREE.PointLight(color, 0.55, 4, 2);
+          light.position.y = 1.2;
+          group.add(light);
+        } else if (accent.type === 'orb') {
+          const orb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.18, 14, 10),
+            new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 }),
+          );
+          orb.position.set(0.45, 1.6, 0);
+          group.add(orb);
+        }
+      }
+
+      // ---- W5: parametric outfit primitives ----
+      // Small Three.js shapes that snap onto a base character GLB to convey
+      // a topical role (archeologist hat + brush, astronaut helmet + pack,
+      // fire-goddess flame crown, scientist lab coat collar). Authored as a
+      // list per NPC; composed at runtime. Keeps everything in-engine — no
+      // model fetch, no async, no API cost.
+      //
+      // Each builder returns a THREE.Group already positioned for a stock
+      // ~1.6m tall character. Approximate body landmarks:
+      //   feet  y=0.0   chest y=1.2   shoulders y=1.5   head center y=1.85
+      //   head top y=2.10   hand y=1.0 at x=±0.35
+
+      const _matLambert = (color) => new THREE.MeshLambertMaterial({ color: new THREE.Color(color) });
+      const _matEmissive = (color, intensity = 0.7) => {
+        const c = new THREE.Color(color);
+        return new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: intensity });
+      };
+
+      const OUTFIT_BUILDERS = {
+        // Wide-brim explorer / archeologist hat. Brown leather default.
+        wide_brim_hat(p) {
+          const g = new THREE.Group();
+          const color = p.color != null ? p.color : 0x6f4a28;
+          const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.04, 18), _matLambert(color));
+          brim.position.y = 1.95;
+          const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 14), _matLambert(color));
+          crown.position.y = 2.07;
+          const band = new THREE.Mesh(new THREE.CylinderGeometry(0.225, 0.225, 0.05, 14), _matLambert(p.bandColor != null ? p.bandColor : 0x3a2818));
+          band.position.y = 1.99;
+          g.add(brim); g.add(crown); g.add(band);
+          return g;
+        },
+        // Tall pointed wizard / witch hat.
+        pointed_hat(p) {
+          const g = new THREE.Group();
+          const color = p.color != null ? p.color : 0x3a2750;
+          const cone = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.7, 14), _matLambert(color));
+          cone.position.y = 2.35;
+          const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 16), _matLambert(color));
+          brim.position.y = 1.99;
+          g.add(cone); g.add(brim);
+          return g;
+        },
+        // Spiky royal crown. Made from short cones around a ring.
+        crown(p) {
+          const g = new THREE.Group();
+          const color = p.color != null ? p.color : 0xf2c84a;
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.04, 8, 18), _matLambert(color));
+          ring.rotation.x = Math.PI / 2;
+          ring.position.y = 1.98;
+          g.add(ring);
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            const spike = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.2, 6), _matLambert(color));
+            spike.position.set(Math.cos(a) * 0.22, 2.08, Math.sin(a) * 0.22);
+            g.add(spike);
+          }
+          return g;
+        },
+        // Halo of small flames around the head. Fire goddess, sun god.
+        flame_crown(p) {
+          const g = new THREE.Group();
+          const color = p.color != null ? p.color : 0xff7a22;
+          for (let i = 0; i < 7; i++) {
+            const a = (i / 7) * Math.PI * 2;
+            const flame = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.32, 6), _matEmissive(color, 1.0));
+            flame.position.set(Math.cos(a) * 0.24, 2.12, Math.sin(a) * 0.24);
+            g.add(flame);
+          }
+          return g;
+        },
+        // Big spherical helmet covering the head. Astronaut, deep-sea diver.
+        helmet_sphere(p) {
+          const g = new THREE.Group();
+          const color = p.color != null ? p.color : 0xeef0f3;
+          const sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(0.32, 18, 14),
+            new THREE.MeshStandardMaterial({
+              color: new THREE.Color(color),
+              roughness: 0.15, metalness: 0.05,
+              transparent: true, opacity: p.opacity != null ? p.opacity : 0.55,
+            }),
+          );
+          sphere.position.y = 1.92;
+          // Visor band — a darker arc across the front of the bubble.
+          const visor = new THREE.Mesh(
+            new THREE.SphereGeometry(0.325, 18, 8, 0, Math.PI, 0.3, 0.5),
+            new THREE.MeshStandardMaterial({ color: 0x223244, roughness: 0.3, metalness: 0.4 }),
+          );
+          visor.position.y = 1.92;
+          visor.rotation.y = -Math.PI / 2;
+          g.add(sphere); g.add(visor);
+          return g;
+        },
+        // Backpack. Astronaut life-support, hiker's pack.
+        backpack(p) {
+          const g = new THREE.Group();
+          const color = p.color != null ? p.color : 0x9aa3a8;
+          const pack = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.55, 0.22), _matLambert(color));
+          pack.position.set(0, 1.35, -0.28);
+          g.add(pack);
+          if (p.tanks !== false) {
+            const tankMat = _matLambert(p.tankColor != null ? p.tankColor : 0xc8c8c8);
+            const tankL = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.4, 10), tankMat);
+            tankL.position.set(-0.12, 1.4, -0.42);
+            const tankR = tankL.clone();
+            tankR.position.x = 0.12;
+            g.add(tankL); g.add(tankR);
+          }
+          return g;
+        },
+        // Lab coat collar / shoulder cape. White by default.
+        lab_coat(p) {
+          const g = new THREE.Group();
+          const color = p.color != null ? p.color : 0xf2efe6;
+          const collar = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.34, 0.4, 0.5, 14, 1, true),
+            new THREE.MeshLambertMaterial({ color: new THREE.Color(color), side: THREE.DoubleSide }),
+          );
+          collar.position.y = 1.28;
+          g.add(collar);
+          return g;
+        },
+        // Cape behind the character. Royalty, hero.
+        cape(p) {
+          const color = p.color != null ? p.color : 0xb4243b;
+          const cape = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.7, 1.2),
+            new THREE.MeshLambertMaterial({ color: new THREE.Color(color), side: THREE.DoubleSide }),
+          );
+          cape.position.set(0, 1.0, -0.22);
+          cape.rotation.x = -0.05;
+          const g = new THREE.Group();
+          g.add(cape);
+          return g;
+        },
+        // Round goggles strap across face. Aviator, scientist, tinkerer.
+        goggles(p) {
+          const color = p.color != null ? p.color : 0x5a3a1f;
+          const lensColor = p.lensColor != null ? p.lensColor : 0x8ed3ea;
+          const g = new THREE.Group();
+          const strap = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.03, 8, 18), _matLambert(color));
+          strap.rotation.x = Math.PI / 2;
+          strap.position.y = 1.9;
+          const lensL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+            new THREE.MeshStandardMaterial({ color: lensColor, emissive: lensColor, emissiveIntensity: 0.4 }));
+          lensL.rotation.x = Math.PI / 2;
+          lensL.position.set(-0.13, 1.9, 0.24);
+          const lensR = lensL.clone();
+          lensR.position.x = 0.13;
+          g.add(strap); g.add(lensL); g.add(lensR);
+          return g;
+        },
+        // Tall staff held to one side. Wizard, shepherd, prophet.
+        staff(p) {
+          const color = p.color != null ? p.color : 0x6b5236;
+          const orbColor = p.orbColor != null ? p.orbColor : 0xb084f0;
+          const side = p.side === 'left' ? -1 : 1;
+          const g = new THREE.Group();
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.8, 8), _matLambert(color));
+          pole.position.set(side * 0.4, 0.9, 0.05);
+          const orb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.11, 14, 10),
+            _matEmissive(orbColor, 0.85),
+          );
+          orb.position.set(side * 0.4, 1.85, 0.05);
+          g.add(pole); g.add(orb);
+          return g;
+        },
+        // Small handheld tool — brush, hammer, wand. Cylinder + knob.
+        tool(p) {
+          const color = p.color != null ? p.color : 0x7a5230;
+          const headColor = p.headColor != null ? p.headColor : 0xc5c5c5;
+          const side = p.side === 'left' ? -1 : 1;
+          const g = new THREE.Group();
+          const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 8), _matLambert(color));
+          handle.rotation.z = side * Math.PI / 8;
+          handle.position.set(side * 0.42, 1.05, 0.0);
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), _matLambert(headColor));
+          head.position.set(side * 0.46, 1.2, 0.0);
+          g.add(handle); g.add(head);
+          return g;
+        },
+        // Satchel slung across the body. Earthy brown by default.
+        satchel(p) {
+          const color = p.color != null ? p.color : 0x6a4528;
+          const side = p.side === 'left' ? -1 : 1;
+          const g = new THREE.Group();
+          const bag = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.12), _matLambert(color));
+          bag.position.set(side * 0.28, 0.95, 0.05);
+          const strap = new THREE.Mesh(
+            new THREE.TorusGeometry(0.32, 0.015, 6, 18, Math.PI),
+            _matLambert(color),
+          );
+          strap.rotation.set(Math.PI / 2, 0, side * Math.PI / 4);
+          strap.position.y = 1.25;
+          g.add(bag); g.add(strap);
+          return g;
+        },
+      };
+
+      function _attachOutfit(group, outfit) {
+        if (!Array.isArray(outfit) || !outfit.length) return;
+        for (const piece of outfit) {
+          if (!piece || !piece.kind) continue;
+          const builder = OUTFIT_BUILDERS[piece.kind];
+          if (!builder) { console.warn('[outfit] unknown kind:', piece.kind); continue; }
+          let g;
+          try { g = builder(piece); }
+          catch (e) { console.warn('[outfit] build failed:', piece.kind, e); continue; }
+          if (!g) continue;
+          if (piece.y != null) g.position.y += Number(piece.y) || 0;
+          group.add(g);
+        }
+      }
+
+      // ---- Costume presets — named bundles of {model, tint, scale, outfit, accent} ----
+      // A vignette can pick a costume by name and override individual fields.
+      // These are hand-authored by me; LLM (when wired) can either reference a
+      // preset or compose its own outfit from the OUTFIT_BUILDERS list.
+      const COSTUME_PRESETS = {
+        archeologist: {
+          model: 'wren', tint: 0xe6d4a8, scale: 1.0,
+          outfit: [
+            { kind: 'wide_brim_hat', color: 0x6f4a28 },
+            { kind: 'satchel', color: 0x5a3a1f, side: 'right' },
+            { kind: 'tool', color: 0x7a5230, headColor: 0xb89060, side: 'left' },
+          ],
+        },
+        astronaut: {
+          model: 'knight', tint: 0xeef1f4, scale: 1.0,
+          outfit: [
+            { kind: 'helmet_sphere', color: 0xf4f6fa, opacity: 0.55 },
+            { kind: 'backpack', color: 0xe2e6ec, tankColor: 0xb8c0c8 },
+          ],
+        },
+        scientist: {
+          model: 'wren', tint: 0xf6f0e0, scale: 1.0,
+          outfit: [
+            { kind: 'lab_coat', color: 0xf6f4ec },
+            { kind: 'goggles', color: 0x3a2818, lensColor: 0x9ce0ec },
+          ],
+        },
+        inventor: {
+          model: 'knight', tint: 0xe0c8a0, scale: 1.0,
+          outfit: [
+            { kind: 'goggles', color: 0x3a2818, lensColor: 0xfff2a0 },
+            { kind: 'tool', color: 0x6f4a28, headColor: 0xc88040, side: 'right' },
+            { kind: 'satchel', color: 0x4f3818, side: 'left' },
+          ],
+        },
+        fire_goddess: {
+          model: 'wren', tint: 0xff9a55, scale: 1.05,
+          outfit: [
+            { kind: 'flame_crown', color: 0xff6a18 },
+            { kind: 'cape', color: 0xc8281c },
+          ],
+          accent: { type: 'glow', color: 0xff6a18 },
+        },
+        royal: {
+          model: 'knight', tint: 0xe8d8a0, scale: 1.05,
+          outfit: [
+            { kind: 'crown', color: 0xf2c84a },
+            { kind: 'cape', color: 0x6a1a8a },
+          ],
+        },
+        sailor: {
+          model: 'knight', tint: 0xc4d6e2, scale: 1.0,
+          outfit: [
+            { kind: 'wide_brim_hat', color: 0x162338, bandColor: 0xf0c050 },
+            { kind: 'satchel', color: 0x162338, side: 'right' },
+          ],
+        },
+        wizard: {
+          model: 'wren', tint: 0xb8aef0, scale: 1.0,
+          outfit: [
+            { kind: 'pointed_hat', color: 0x3a2750 },
+            { kind: 'staff', color: 0x6b5236, orbColor: 0xb084f0 },
+          ],
+          accent: { type: 'glow', color: 0xb084f0 },
+        },
+        explorer: {
+          model: 'finn', tint: 0xc8b890, scale: 1.0,
+          outfit: [
+            { kind: 'wide_brim_hat', color: 0x6a4a30 },
+            { kind: 'satchel', color: 0x4a3220, side: 'right' },
+          ],
+        },
+        // "wild" creatures often work better with no outfit, just the base
+        // GLB (frog/Pip stand-in). Tint adds variety without fighting the silhouette.
+        creature: { model: 'frog', tint: null, scale: 0.95, outfit: [] },
+      };
+
+      function _resolveAppearance(member) {
+        const hint = String(member.appearance_hint || '').toLowerCase();
+        const fromHint = APPEARANCE_HINT_DEFAULTS[hint] || APPEARANCE_HINT_DEFAULTS.tinkerer;
+        const explicit = member.appearance || {};
+        // Costume preset is the highest-level shortcut — picks model + tint +
+        // outfit + accent in one keyword. Explicit fields still override.
+        const presetKey = String(explicit.costume || '').toLowerCase();
+        const preset = COSTUME_PRESETS[presetKey] || null;
+        const modelKey = String(
+          explicit.model || (preset && preset.model) || fromHint.model
+        ).toLowerCase();
+        const glbFn = MODEL_GLBS[modelKey] || MODEL_GLBS.knight;
+        const scale = Number(
+          explicit.scale != null ? explicit.scale
+            : preset && preset.scale != null ? preset.scale
+            : fromHint.scale,
+        ) || 1.0;
+        // Tint priority: explicit → preset → hint default → name-hash.
+        let tint;
+        if (explicit.tint != null) tint = new THREE.Color(explicit.tint);
+        else if (preset && preset.tint != null) tint = new THREE.Color(preset.tint);
+        else if (fromHint.tint != null) tint = new THREE.Color(fromHint.tint);
+        else tint = _nameTint(member.name);
+        // Blend in a tiny name-hash so same-tint NPCs still differ subtly.
+        if (explicit.tint == null) {
+          tint.lerp(_nameTint(member.name), 0.22);
+        }
+        // Outfit: explicit overrides preset entirely (lets author opt out).
+        const outfit = Array.isArray(explicit.outfit)
+          ? explicit.outfit
+          : (preset && Array.isArray(preset.outfit) ? preset.outfit : []);
+        const accent = explicit.accent || (preset && preset.accent) || null;
+        return { glb: glbFn(), scale, tint, outfit, accent };
+      }
+      buildMultiNpcScene = function (region, vignette, saved) {
+        if (!vignette || !Array.isArray(vignette.cast) || vignette.cast.length === 0) return;
+        const cx = region.center.x;
+        const cz = region.center.z;
+        const savedNpcs = (saved && Array.isArray(saved.npcs)) ? saved.npcs : [];
+        for (let idx = 0; idx < vignette.cast.length; idx++) {
+          const member = vignette.cast[idx] || {};
+          const pos = member.position || { angleDeg: 0, radius: 0 };
+          const rad = Math.max(0, Math.min(12, Number(pos.radius) || 0));
+          const theta = ((Number(pos.angleDeg) || 0) % 360) * Math.PI / 180;
+          const nx = cx + Math.cos(theta) * rad;
+          const nz = cz + Math.sin(theta) * rad;
+          const look = _resolveAppearance(member);
+
+          const npcGroup = new THREE.Group();
+          npcGroup.position.set(nx, heightAt(nx, nz), nz);
+          // Center members face toward home (origin); others face the region's
+          // center so the cast reads as a gathered group.
+          if (rad < 0.01) {
+            npcGroup.rotation.y = Math.atan2(-cx, -cz);
+          } else {
+            npcGroup.rotation.y = Math.atan2(cx - nx, cz - nz);
+          }
+          scene.add(npcGroup);
+          const setup = setupKayKitChar(look.glb, npcGroup, null, look.scale);
+          _applyTint(npcGroup, look.tint);
+          _attachOutfit(npcGroup, look.outfit);
+          _attachAccent(npcGroup, look.accent);
+
+          const speaker = String(member.name || `Stranger ${idx + 1}`);
+          const rawLines = Array.isArray(member.dialogue) ? member.dialogue : ['Hello there.'];
+          const lines = rawLines.map((l) => String(l || '').trim()).filter(Boolean);
+          const safeLines = lines.length ? lines : ['Hello there.'];
+          const script = safeLines.map((text, i) => ({
+            speaker,
+            text,
+            end: i === safeLines.length - 1,
+          }));
+
+          const id = `${region.id}:cast-${idx}`;
+          const prev = savedNpcs.find((n) => n && n.id === id);
+          npcs.push({
+            id,
+            group: npcGroup,
+            mixer: setup.mixer,
+            triggerDist: 3.0,
+            promptDist: 5.5,
+            script,
+            met: !!(prev && prev.met),
+          });
+        }
+      };
+
       // Sub-NPC builder — placed once here so the module-level deepenRegion
       // can call through to it via the `buildSubNpc` slot.
       buildSubNpc = function (region, sub) {
@@ -2284,9 +3316,16 @@
         Object.defineProperty(sub, '_npcRef', { value: npc, enumerable: false });
       };
 
-      // Build each registered region's content.
+      // Build each registered region's content. If a restored region has an
+      // LLM-authored vignette, use the multi-NPC builder; otherwise fall
+      // through to the region's template-defined build (single NPC).
       for (const r of regions) {
-        if (r.template && r.template.build) r.template.build(r, savedState);
+        if (r.vignette && buildMultiNpcScene) {
+          buildSetPieces(r, r.vignette);
+          buildMultiNpcScene(r, r.vignette, savedState);
+        } else if (r.template && r.template.build) {
+          r.template.build(r, savedState);
+        }
       }
 
       // Campfire — the always-available "ask a question" hub. Wren stands near
