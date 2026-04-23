@@ -958,6 +958,7 @@
           family:   sp.family,
           vignette: sp.vignette || null,
           subNpcs:  Array.isArray(sp.subNpcs) ? sp.subNpcs : [],
+          unlockedExtensionIds: Array.isArray(sp.unlockedExtensionIds) ? sp.unlockedExtensionIds.slice() : [],
           chunkId,
           restored: true,
         };
@@ -1124,6 +1125,7 @@
               params:     { ...r.params },
               topic:      r.topic,
               vignette:   r.vignette || null,
+              unlockedExtensionIds: Array.isArray(r.unlockedExtensionIds) ? r.unlockedExtensionIds.slice() : [],
               subNpcs:    Array.isArray(r.subNpcs) ? r.subNpcs.map((s) => ({
                 id:       s.id,
                 topic:    s.topic,
@@ -1751,13 +1753,109 @@
       saveState();
     }
 
+    // ---- Phase 0a: single-concept accretion ----
+    // When a player asks a topic whose keywords match a region they've
+    // already spawned, we EXTEND that region with one authored "minor pass"
+    // (an extra NPC + props) instead of claiming a new chunk. Extensions
+    // come from the vignette's `extensions[]` array; which one we pick
+    // depends on the specific keywords in the new topic (so asking about
+    // "batteries" gets Volta, while "lightning" gets the storm sprite).
+
+    // Does `topicString` match `region`'s concept via its vignette/match keywords?
+    function matchesRegionConcept(region, topicString) {
+      const t = String(topicString || '').toLowerCase().trim();
+      if (!t) return false;
+      const v = region.vignette;
+      if (!v) return false;
+      if (Array.isArray(v.match)) {
+        for (const kw of v.match) {
+          if (kw && t.includes(String(kw).toLowerCase())) return true;
+        }
+      }
+      // Extension keywords also count as "same concept" so asking a
+      // sub-topic can still extend this region.
+      if (Array.isArray(v.extensions)) {
+        for (const ext of v.extensions) {
+          if (!Array.isArray(ext.keywords)) continue;
+          for (const kw of ext.keywords) {
+            if (kw && t.includes(String(kw).toLowerCase())) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    // Pick the best unused extension for this topic. Preference:
+    //   1) An unused extension whose keywords match the topic
+    //   2) The next unused extension in author order
+    //   3) null (caller should fall back)
+    function pickExtensionForTopic(region, topicString) {
+      const v = region.vignette;
+      if (!v || !Array.isArray(v.extensions) || !v.extensions.length) return null;
+      if (!Array.isArray(region.unlockedExtensionIds)) region.unlockedExtensionIds = [];
+      const used = new Set(region.unlockedExtensionIds);
+      const t = String(topicString || '').toLowerCase();
+      // Keyword match first.
+      for (const ext of v.extensions) {
+        if (!ext || !ext.id || used.has(ext.id)) continue;
+        if (Array.isArray(ext.keywords)) {
+          for (const kw of ext.keywords) {
+            if (kw && t.includes(String(kw).toLowerCase())) return ext;
+          }
+        }
+      }
+      // Fall through: first unused extension in author order.
+      for (const ext of v.extensions) {
+        if (ext && ext.id && !used.has(ext.id)) return ext;
+      }
+      return null;
+    }
+
+    // Apply an extension to the region in place. Adds new cast members at
+    // their authored positions and any extra set_pieces. Records the
+    // extension id in region.unlockedExtensionIds so it only plays once.
+    function extendRegionWithExtension(region, ext) {
+      if (!region || !ext || !ext.id) return false;
+      if (!Array.isArray(region.unlockedExtensionIds)) region.unlockedExtensionIds = [];
+      if (region.unlockedExtensionIds.includes(ext.id)) return false;
+      region.unlockedExtensionIds.push(ext.id);
+      if (Array.isArray(ext.set_pieces) && ext.set_pieces.length) {
+        buildSetPieces(region, { set_pieces: ext.set_pieces });
+      }
+      if (Array.isArray(ext.cast) && ext.cast.length && buildMultiNpcScene) {
+        buildMultiNpcScene(
+          region,
+          { cast: ext.cast },
+          null,
+          { idPrefix: `ext-${ext.id}` },
+        );
+      }
+      return true;
+    }
+
     function spawnRegion(topicString) {
       const rawKey = normalizeTopic(topicString);
       if (!rawKey) return;
-      // Same topic already asked? Deepen that region instead of spawning.
+      // Exact-topic re-ask → legacy sub-NPC deepen. (Keeps behavior stable
+      // when a kid types the identical query twice.)
       const existing = regions.find((r) => r.topicKey && normalizeTopic(r.topicKey) === rawKey);
       if (existing) {
         deepenRegion(existing, topicString);
+        return;
+      }
+      // Phase 0a: topic belongs to the same CONCEPT as a region we already
+      // spawned? Extend that region with the next authored extension
+      // instead of claiming a fresh chunk. Falls back to templated deepen
+      // when the concept has no remaining extensions.
+      const sameConcept = regions.find((r) => r.topicKey && matchesRegionConcept(r, topicString));
+      if (sameConcept) {
+        const ext = pickExtensionForTopic(sameConcept, topicString);
+        if (ext) {
+          extendRegionWithExtension(sameConcept, ext);
+          saveState();
+        } else {
+          deepenRegion(sameConcept, topicString);
+        }
         return;
       }
       // Fresh topic: claim a dedicated chunk at the next free dock.
@@ -2597,6 +2695,114 @@
       return { mixer: m, idle, walk, cheer };
     }
 
+    // W5: plain primitive humanoid — a neutral chibi "mannequin" the
+    // costume system dresses. KayKit-style chibi proportions (oversized
+    // head, short stubby limbs, chunky torso) at adult-KayKit height so it
+    // stands next to Finn/Wren/Knight/Pip and reads as the same genre.
+    //
+    // Known body landmarks (unscaled). Outfit primitives target these:
+    //   feet y=0.00   knee y=0.38   hip y=0.62
+    //   chest y=1.00   shoulder y=1.30   chin y=1.40
+    //   head center y=1.78   head top y=2.15
+    //
+    // Materials split so tint reads correctly:
+    //   shirtMat (white)   — torso + arms. Starts white so _applyTint sets
+    //                        it to the NPC's color directly.
+    //   pantsMat (dark)    — legs. Already dark, so tint multiplication
+    //                        keeps it mostly dark regardless of shirt tint.
+    //   skinMat (cream)    — head, hands, neck. Gets a subtle tint only.
+    //   shoeMat (very dark)— feet. Keeps dark silhouette on the ground.
+    function buildBaseHumanoid(groupTarget, scale = 1.0) {
+      while (groupTarget.children.length) groupTarget.remove(groupTarget.children[0]);
+      const body = new THREE.Group();
+      body.scale.setScalar(scale);
+
+      const shirtMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+      const pantsMat = new THREE.MeshLambertMaterial({ color: 0x4a3820 });
+      const skinMat  = new THREE.MeshLambertMaterial({ color: 0xf2cfa4 });
+      const shoeMat  = new THREE.MeshLambertMaterial({ color: 0x2a1f14 });
+
+      // Feet — chunky boxes. Height 0.12 → top at y=0.12.
+      const footGeo = new THREE.BoxGeometry(0.26, 0.12, 0.34);
+      const footL = new THREE.Mesh(footGeo, shoeMat);
+      footL.position.set(-0.15, 0.06, 0.04);
+      footL.castShadow = true;
+      const footR = new THREE.Mesh(footGeo, shoeMat);
+      footR.position.set(0.15, 0.06, 0.04);
+      footR.castShadow = true;
+      body.add(footL); body.add(footR);
+
+      // Legs — short stubby cylinders. Height 0.5 → spans 0.12–0.62 (hip).
+      const legGeo = new THREE.CylinderGeometry(0.14, 0.11, 0.5, 10);
+      const legL = new THREE.Mesh(legGeo, pantsMat);
+      legL.position.set(-0.15, 0.37, 0);
+      legL.castShadow = true;
+      const legR = new THREE.Mesh(legGeo, pantsMat);
+      legR.position.set(0.15, 0.37, 0);
+      legR.castShadow = true;
+      body.add(legL); body.add(legR);
+
+      // Torso — chunky barrel, wider at chest than hips for the KayKit
+      // "puffy tunic" feel. Height 0.72, center y=0.98 → spans 0.62–1.34.
+      const torso = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.36, 0.28, 0.72, 14),
+        shirtMat,
+      );
+      torso.position.y = 0.98;
+      torso.castShadow = true;
+      body.add(torso);
+
+      // Arms — short chubby cylinders beside the torso.
+      // Shoulder at y=1.30, hand at y=0.78, length 0.55.
+      const armGeo = new THREE.CylinderGeometry(0.11, 0.10, 0.55, 10);
+      const armL = new THREE.Mesh(armGeo, shirtMat);
+      armL.position.set(-0.42, 1.05, 0);
+      armL.castShadow = true;
+      const armR = new THREE.Mesh(armGeo, shirtMat);
+      armR.position.set(0.42, 1.05, 0);
+      armR.castShadow = true;
+      body.add(armL); body.add(armR);
+
+      // Hands — plump skin spheres at the arm ends.
+      const handGeo = new THREE.SphereGeometry(0.12, 12, 8);
+      const handL = new THREE.Mesh(handGeo, skinMat);
+      handL.position.set(-0.42, 0.78, 0);
+      handL.castShadow = true;
+      const handR = new THREE.Mesh(handGeo, skinMat);
+      handR.position.set(0.42, 0.78, 0);
+      handR.castShadow = true;
+      body.add(handL); body.add(handR);
+
+      // Short neck under the chin.
+      const neck = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.12, 0.1, 10),
+        skinMat,
+      );
+      neck.position.y = 1.38;
+      body.add(neck);
+
+      // Head — BIG sphere, that chibi tell. Radius 0.37 → top y=2.15.
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.37, 18, 14),
+        skinMat,
+      );
+      head.position.y = 1.78;
+      head.castShadow = true;
+      body.add(head);
+
+      // Cartoon eyes — generously sized for the chibi read.
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1a1208 });
+      const eyeGeo = new THREE.SphereGeometry(0.05, 8, 6);
+      const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+      eyeL.position.set(-0.12, 1.84, 0.32);
+      const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+      eyeR.position.set(0.12, 1.84, 0.32);
+      body.add(eyeL); body.add(eyeR);
+
+      groupTarget.add(body);
+      return { mixer: null, idle: null, walk: null, cheer: null };
+    }
+
     (async () => {
       // Load characters + the log GLB used for puzzle planks in parallel
       const [finnGlb, wrenGlb, frogGlb, knightGlb, logGlb] = await Promise.all([
@@ -2824,15 +3030,26 @@
       // explicit `appearance` (model + tint + scale + accent) OR a
       // shorthand `appearance_hint`, and a dialogue script.
 
-      // Map `appearance.model` strings → loaded GLB references.
-      const MODEL_GLBS = {
-        knight: () => knightGlb,
-        wren:   () => wrenGlb,
-        mage:   () => wrenGlb,   // alias
-        finn:   () => finnGlb,
-        rogue:  () => finnGlb,   // alias
-        frog:   () => frogGlb,
-        pip:    () => frogGlb,   // alias
+      // Unified character-factory registry. Each entry returns the
+      // animation setup object {mixer, idle, walk, cheer} — null mixer means
+      // static. GLB-backed entries use setupKayKitChar; 'base' is the plain
+      // primitive humanoid from buildBaseHumanoid (today's addition).
+      //
+      // `base` is the recommended starting point for topical costumes
+      // (archeologist, astronaut, scientist, etc.) because outfits alone
+      // define the silhouette. The named GLBs keep their inherent
+      // personality: wren = mage, knight = armored warrior, frog = chibi
+      // creature, finn = hooded rogue — pick them when you want that
+      // built-in character feel on top of any tint/outfit you add.
+      const MODEL_FACTORIES = {
+        base:   (g, s) => buildBaseHumanoid(g, s),
+        knight: (g, s) => setupKayKitChar(knightGlb, g, null, s),
+        wren:   (g, s) => setupKayKitChar(wrenGlb,   g, null, s),
+        mage:   (g, s) => setupKayKitChar(wrenGlb,   g, null, s), // alias
+        finn:   (g, s) => setupKayKitChar(finnGlb,   g, null, s),
+        rogue:  (g, s) => setupKayKitChar(finnGlb,   g, null, s), // alias
+        frog:   (g, s) => setupKayKitChar(frogGlb,   g, null, s),
+        pip:    (g, s) => setupKayKitChar(frogGlb,   g, null, s), // alias
       };
 
       // appearance_hint shorthand → defaults for {model, scale, tint}.
@@ -2880,29 +3097,37 @@
 
       // Optional accent — small visual differentiator stuck on the NPC.
       // halo: glowing ring above the head; glow: gentle point light.
-      function _attachAccent(group, accent) {
+      function _attachAccent(group, accent, scale = 1.0) {
         if (!accent || !accent.type) return;
         const color = new THREE.Color(accent.color != null ? accent.color : 0xffe49a);
+        // Wrap the accent in a scalable group so it tracks the character's
+        // size. y-positions inside match the chibi base landmarks (head top
+        // y=2.15, chest y=1.00, hand y=0.78).
+        const wrap = new THREE.Group();
         if (accent.type === 'halo') {
           const ring = new THREE.Mesh(
-            new THREE.TorusGeometry(0.32, 0.05, 8, 24),
+            new THREE.TorusGeometry(0.38, 0.05, 8, 24),
             new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.9 }),
           );
           ring.rotation.x = Math.PI / 2;
-          ring.position.y = 2.05;
-          group.add(ring);
+          ring.position.y = 2.28;
+          wrap.add(ring);
         } else if (accent.type === 'glow') {
-          const light = new THREE.PointLight(color, 0.55, 4, 2);
-          light.position.y = 1.2;
-          group.add(light);
+          const light = new THREE.PointLight(color, 0.6, 5, 2);
+          light.position.y = 1.3;
+          wrap.add(light);
         } else if (accent.type === 'orb') {
           const orb = new THREE.Mesh(
-            new THREE.SphereGeometry(0.18, 14, 10),
+            new THREE.SphereGeometry(0.2, 14, 10),
             new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 }),
           );
-          orb.position.set(0.45, 1.6, 0);
-          group.add(orb);
+          orb.position.set(0.5, 1.5, 0);
+          wrap.add(orb);
+        } else {
+          return; // unknown accent type
         }
+        if (scale !== 1.0) wrap.scale.setScalar(scale);
+        group.add(wrap);
       }
 
       // ---- W5: parametric outfit primitives ----
@@ -2913,9 +3138,9 @@
       // model fetch, no async, no API cost.
       //
       // Each builder returns a THREE.Group already positioned for a stock
-      // ~1.6m tall character. Approximate body landmarks:
-      //   feet  y=0.0   chest y=1.2   shoulders y=1.5   head center y=1.85
-      //   head top y=2.10   hand y=1.0 at x=±0.35
+      // Outfit primitives target the chibi base humanoid's landmarks:
+      //   feet y=0   hip y=0.62   chest y=1.00   shoulder y=1.30
+      //   hand y=0.78 at x=±0.42   head center y=1.78   head top y=2.15
 
       const _matLambert = (color) => new THREE.MeshLambertMaterial({ color: new THREE.Color(color) });
       const _matEmissive = (color, intensity = 0.7) => {
@@ -2928,12 +3153,12 @@
         wide_brim_hat(p) {
           const g = new THREE.Group();
           const color = p.color != null ? p.color : 0x6f4a28;
-          const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.04, 18), _matLambert(color));
-          brim.position.y = 1.95;
-          const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 14), _matLambert(color));
-          crown.position.y = 2.07;
-          const band = new THREE.Mesh(new THREE.CylinderGeometry(0.225, 0.225, 0.05, 14), _matLambert(p.bandColor != null ? p.bandColor : 0x3a2818));
-          band.position.y = 1.99;
+          const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.05, 20), _matLambert(color));
+          brim.position.y = 2.18;
+          const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.22, 16), _matLambert(color));
+          crown.position.y = 2.32;
+          const band = new THREE.Mesh(new THREE.CylinderGeometry(0.285, 0.285, 0.06, 16), _matLambert(p.bandColor != null ? p.bandColor : 0x3a2818));
+          band.position.y = 2.22;
           g.add(brim); g.add(crown); g.add(band);
           return g;
         },
@@ -2941,10 +3166,10 @@
         pointed_hat(p) {
           const g = new THREE.Group();
           const color = p.color != null ? p.color : 0x3a2750;
-          const cone = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.7, 14), _matLambert(color));
-          cone.position.y = 2.35;
-          const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 16), _matLambert(color));
-          brim.position.y = 1.99;
+          const cone = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.8, 16), _matLambert(color));
+          cone.position.y = 2.6;
+          const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.05, 18), _matLambert(color));
+          brim.position.y = 2.19;
           g.add(cone); g.add(brim);
           return g;
         },
@@ -2952,14 +3177,14 @@
         crown(p) {
           const g = new THREE.Group();
           const color = p.color != null ? p.color : 0xf2c84a;
-          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.04, 8, 18), _matLambert(color));
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 8, 20), _matLambert(color));
           ring.rotation.x = Math.PI / 2;
-          ring.position.y = 1.98;
+          ring.position.y = 2.03;
           g.add(ring);
           for (let i = 0; i < 6; i++) {
             const a = (i / 6) * Math.PI * 2;
-            const spike = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.2, 6), _matLambert(color));
-            spike.position.set(Math.cos(a) * 0.22, 2.08, Math.sin(a) * 0.22);
+            const spike = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.22, 6), _matLambert(color));
+            spike.position.set(Math.cos(a) * 0.28, 2.14, Math.sin(a) * 0.28);
             g.add(spike);
           }
           return g;
@@ -2970,8 +3195,8 @@
           const color = p.color != null ? p.color : 0xff7a22;
           for (let i = 0; i < 7; i++) {
             const a = (i / 7) * Math.PI * 2;
-            const flame = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.32, 6), _matEmissive(color, 1.0));
-            flame.position.set(Math.cos(a) * 0.24, 2.12, Math.sin(a) * 0.24);
+            const flame = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.34, 6), _matEmissive(color, 1.0));
+            flame.position.set(Math.cos(a) * 0.3, 2.3, Math.sin(a) * 0.3);
             g.add(flame);
           }
           return g;
@@ -2981,20 +3206,20 @@
           const g = new THREE.Group();
           const color = p.color != null ? p.color : 0xeef0f3;
           const sphere = new THREE.Mesh(
-            new THREE.SphereGeometry(0.32, 18, 14),
+            new THREE.SphereGeometry(0.42, 20, 16),
             new THREE.MeshStandardMaterial({
               color: new THREE.Color(color),
               roughness: 0.15, metalness: 0.05,
               transparent: true, opacity: p.opacity != null ? p.opacity : 0.55,
             }),
           );
-          sphere.position.y = 1.92;
+          sphere.position.y = 1.78;
           // Visor band — a darker arc across the front of the bubble.
           const visor = new THREE.Mesh(
-            new THREE.SphereGeometry(0.325, 18, 8, 0, Math.PI, 0.3, 0.5),
+            new THREE.SphereGeometry(0.425, 20, 10, 0, Math.PI, 0.3, 0.5),
             new THREE.MeshStandardMaterial({ color: 0x223244, roughness: 0.3, metalness: 0.4 }),
           );
-          visor.position.y = 1.92;
+          visor.position.y = 1.78;
           visor.rotation.y = -Math.PI / 2;
           g.add(sphere); g.add(visor);
           return g;
@@ -3003,15 +3228,15 @@
         backpack(p) {
           const g = new THREE.Group();
           const color = p.color != null ? p.color : 0x9aa3a8;
-          const pack = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.55, 0.22), _matLambert(color));
-          pack.position.set(0, 1.35, -0.28);
+          const pack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 0.22), _matLambert(color));
+          pack.position.set(0, 1.02, -0.4);
           g.add(pack);
           if (p.tanks !== false) {
             const tankMat = _matLambert(p.tankColor != null ? p.tankColor : 0xc8c8c8);
-            const tankL = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.4, 10), tankMat);
-            tankL.position.set(-0.12, 1.4, -0.42);
+            const tankL = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.5, 10), tankMat);
+            tankL.position.set(-0.14, 1.08, -0.55);
             const tankR = tankL.clone();
-            tankR.position.x = 0.12;
+            tankR.position.x = 0.14;
             g.add(tankL); g.add(tankR);
           }
           return g;
@@ -3021,10 +3246,10 @@
           const g = new THREE.Group();
           const color = p.color != null ? p.color : 0xf2efe6;
           const collar = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.34, 0.4, 0.5, 14, 1, true),
+            new THREE.CylinderGeometry(0.38, 0.44, 0.56, 16, 1, true),
             new THREE.MeshLambertMaterial({ color: new THREE.Color(color), side: THREE.DoubleSide }),
           );
-          collar.position.y = 1.28;
+          collar.position.y = 1.08;
           g.add(collar);
           return g;
         },
@@ -3032,10 +3257,10 @@
         cape(p) {
           const color = p.color != null ? p.color : 0xb4243b;
           const cape = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.7, 1.2),
+            new THREE.PlaneGeometry(0.8, 1.1),
             new THREE.MeshLambertMaterial({ color: new THREE.Color(color), side: THREE.DoubleSide }),
           );
-          cape.position.set(0, 1.0, -0.22);
+          cape.position.set(0, 0.82, -0.28);
           cape.rotation.x = -0.05;
           const g = new THREE.Group();
           g.add(cape);
@@ -3046,15 +3271,15 @@
           const color = p.color != null ? p.color : 0x5a3a1f;
           const lensColor = p.lensColor != null ? p.lensColor : 0x8ed3ea;
           const g = new THREE.Group();
-          const strap = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.03, 8, 18), _matLambert(color));
+          const strap = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.035, 8, 20), _matLambert(color));
           strap.rotation.x = Math.PI / 2;
-          strap.position.y = 1.9;
-          const lensL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+          strap.position.y = 1.84;
+          const lensL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
             new THREE.MeshStandardMaterial({ color: lensColor, emissive: lensColor, emissiveIntensity: 0.4 }));
           lensL.rotation.x = Math.PI / 2;
-          lensL.position.set(-0.13, 1.9, 0.24);
+          lensL.position.set(-0.15, 1.84, 0.33);
           const lensR = lensL.clone();
-          lensR.position.x = 0.13;
+          lensR.position.x = 0.15;
           g.add(strap); g.add(lensL); g.add(lensR);
           return g;
         },
@@ -3064,13 +3289,13 @@
           const orbColor = p.orbColor != null ? p.orbColor : 0xb084f0;
           const side = p.side === 'left' ? -1 : 1;
           const g = new THREE.Group();
-          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.8, 8), _matLambert(color));
-          pole.position.set(side * 0.4, 0.9, 0.05);
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.1, 8), _matLambert(color));
+          pole.position.set(side * 0.5, 1.05, 0.08);
           const orb = new THREE.Mesh(
-            new THREE.SphereGeometry(0.11, 14, 10),
+            new THREE.SphereGeometry(0.13, 14, 10),
             _matEmissive(orbColor, 0.85),
           );
-          orb.position.set(side * 0.4, 1.85, 0.05);
+          orb.position.set(side * 0.5, 2.15, 0.08);
           g.add(pole); g.add(orb);
           return g;
         },
@@ -3080,11 +3305,11 @@
           const headColor = p.headColor != null ? p.headColor : 0xc5c5c5;
           const side = p.side === 'left' ? -1 : 1;
           const g = new THREE.Group();
-          const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 8), _matLambert(color));
+          const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.36, 8), _matLambert(color));
           handle.rotation.z = side * Math.PI / 8;
-          handle.position.set(side * 0.42, 1.05, 0.0);
-          const head = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), _matLambert(headColor));
-          head.position.set(side * 0.46, 1.2, 0.0);
+          handle.position.set(side * 0.52, 0.85, 0.0);
+          const head = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), _matLambert(headColor));
+          head.position.set(side * 0.56, 1.02, 0.0);
           g.add(handle); g.add(head);
           return g;
         },
@@ -3093,21 +3318,25 @@
           const color = p.color != null ? p.color : 0x6a4528;
           const side = p.side === 'left' ? -1 : 1;
           const g = new THREE.Group();
-          const bag = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.12), _matLambert(color));
-          bag.position.set(side * 0.28, 0.95, 0.05);
+          const bag = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.26, 0.14), _matLambert(color));
+          bag.position.set(side * 0.34, 0.68, 0.05);
           const strap = new THREE.Mesh(
-            new THREE.TorusGeometry(0.32, 0.015, 6, 18, Math.PI),
+            new THREE.TorusGeometry(0.38, 0.02, 6, 20, Math.PI),
             _matLambert(color),
           );
           strap.rotation.set(Math.PI / 2, 0, side * Math.PI / 4);
-          strap.position.y = 1.25;
+          strap.position.y = 1.2;
           g.add(bag); g.add(strap);
           return g;
         },
       };
 
-      function _attachOutfit(group, outfit) {
+      function _attachOutfit(group, outfit, scale = 1.0) {
         if (!Array.isArray(outfit) || !outfit.length) return;
+        // Outfit y-positions are authored against the unscaled body
+        // landmarks (head 1.85, chest 1.20, etc.). Scale each piece by the
+        // character's scale so a small child's hat sits on their head, not
+        // floating above at full-adult height.
         for (const piece of outfit) {
           if (!piece || !piece.kind) continue;
           const builder = OUTFIT_BUILDERS[piece.kind];
@@ -3117,6 +3346,7 @@
           catch (e) { console.warn('[outfit] build failed:', piece.kind, e); continue; }
           if (!g) continue;
           if (piece.y != null) g.position.y += Number(piece.y) || 0;
+          if (scale !== 1.0) g.scale.setScalar(scale);
           group.add(g);
         }
       }
@@ -3125,9 +3355,13 @@
       // A vignette can pick a costume by name and override individual fields.
       // These are hand-authored by me; LLM (when wired) can either reference a
       // preset or compose its own outfit from the OUTFIT_BUILDERS list.
+      // Costume presets. `model: 'base'` = the neutral primitive humanoid
+      // we just added — the outfit alone defines the look. We reach for a
+      // named GLB only when the character's identity comes from the built-in
+      // silhouette (frog for a dolphin/rex, knight for an armored guard).
       const COSTUME_PRESETS = {
         archeologist: {
-          model: 'wren', tint: 0xe6d4a8, scale: 1.0,
+          model: 'base', tint: 0xd4b878, scale: 1.0,
           outfit: [
             { kind: 'wide_brim_hat', color: 0x6f4a28 },
             { kind: 'satchel', color: 0x5a3a1f, side: 'right' },
@@ -3135,21 +3369,21 @@
           ],
         },
         astronaut: {
-          model: 'knight', tint: 0xeef1f4, scale: 1.0,
+          model: 'base', tint: 0xf0f3f6, scale: 1.0,
           outfit: [
             { kind: 'helmet_sphere', color: 0xf4f6fa, opacity: 0.55 },
             { kind: 'backpack', color: 0xe2e6ec, tankColor: 0xb8c0c8 },
           ],
         },
         scientist: {
-          model: 'wren', tint: 0xf6f0e0, scale: 1.0,
+          model: 'base', tint: 0xf2efe6, scale: 1.0,
           outfit: [
             { kind: 'lab_coat', color: 0xf6f4ec },
             { kind: 'goggles', color: 0x3a2818, lensColor: 0x9ce0ec },
           ],
         },
         inventor: {
-          model: 'knight', tint: 0xe0c8a0, scale: 1.0,
+          model: 'base', tint: 0xd6b080, scale: 1.0,
           outfit: [
             { kind: 'goggles', color: 0x3a2818, lensColor: 0xfff2a0 },
             { kind: 'tool', color: 0x6f4a28, headColor: 0xc88040, side: 'right' },
@@ -3157,7 +3391,7 @@
           ],
         },
         fire_goddess: {
-          model: 'wren', tint: 0xff9a55, scale: 1.05,
+          model: 'base', tint: 0xff9a55, scale: 1.05,
           outfit: [
             { kind: 'flame_crown', color: 0xff6a18 },
             { kind: 'cape', color: 0xc8281c },
@@ -3165,6 +3399,8 @@
           accent: { type: 'glow', color: 0xff6a18 },
         },
         royal: {
+          // Royal leans on the knight GLB's armored build — that reads as
+          // "regal" even before the cape + crown go on.
           model: 'knight', tint: 0xe8d8a0, scale: 1.05,
           outfit: [
             { kind: 'crown', color: 0xf2c84a },
@@ -3172,13 +3408,15 @@
           ],
         },
         sailor: {
-          model: 'knight', tint: 0xc4d6e2, scale: 1.0,
+          model: 'base', tint: 0xc4d6e2, scale: 1.0,
           outfit: [
             { kind: 'wide_brim_hat', color: 0x162338, bandColor: 0xf0c050 },
             { kind: 'satchel', color: 0x162338, side: 'right' },
           ],
         },
         wizard: {
+          // Wizard keeps the wren GLB — the mage silhouette underneath adds
+          // personality the primitive base doesn't have.
           model: 'wren', tint: 0xb8aef0, scale: 1.0,
           outfit: [
             { kind: 'pointed_hat', color: 0x3a2750 },
@@ -3187,14 +3425,20 @@
           accent: { type: 'glow', color: 0xb084f0 },
         },
         explorer: {
-          model: 'finn', tint: 0xc8b890, scale: 1.0,
+          model: 'base', tint: 0xc8b890, scale: 1.0,
           outfit: [
             { kind: 'wide_brim_hat', color: 0x6a4a30 },
             { kind: 'satchel', color: 0x4a3220, side: 'right' },
           ],
         },
-        // "wild" creatures often work better with no outfit, just the base
-        // GLB (frog/Pip stand-in). Tint adds variety without fighting the silhouette.
+        child: {
+          model: 'base', tint: 0xfff0c0, scale: 0.72,
+          outfit: [
+            { kind: 'satchel', color: 0x7a4020, side: 'right' },
+          ],
+        },
+        // Non-human creatures look right on the Pip/frog silhouette. Tint
+        // gives per-name variation without fighting the base shape.
         creature: { model: 'frog', tint: null, scale: 0.95, outfit: [] },
       };
 
@@ -3209,7 +3453,7 @@
         const modelKey = String(
           explicit.model || (preset && preset.model) || fromHint.model
         ).toLowerCase();
-        const glbFn = MODEL_GLBS[modelKey] || MODEL_GLBS.knight;
+        const modelFactory = MODEL_FACTORIES[modelKey] || MODEL_FACTORIES.base;
         const scale = Number(
           explicit.scale != null ? explicit.scale
             : preset && preset.scale != null ? preset.scale
@@ -3230,13 +3474,16 @@
           ? explicit.outfit
           : (preset && Array.isArray(preset.outfit) ? preset.outfit : []);
         const accent = explicit.accent || (preset && preset.accent) || null;
-        return { glb: glbFn(), scale, tint, outfit, accent };
+        return { modelFactory, modelKey, scale, tint, outfit, accent };
       }
-      buildMultiNpcScene = function (region, vignette, saved) {
+      buildMultiNpcScene = function (region, vignette, saved, options) {
         if (!vignette || !Array.isArray(vignette.cast) || vignette.cast.length === 0) return;
         const cx = region.center.x;
         const cz = region.center.z;
         const savedNpcs = (saved && Array.isArray(saved.npcs)) ? saved.npcs : [];
+        // Extensions reuse this builder with an idPrefix so the added NPCs
+        // don't collide with the seed vignette's `${region.id}:cast-N` ids.
+        const idPrefix = (options && options.idPrefix) ? options.idPrefix : 'cast';
         for (let idx = 0; idx < vignette.cast.length; idx++) {
           const member = vignette.cast[idx] || {};
           const pos = member.position || { angleDeg: 0, radius: 0 };
@@ -3256,10 +3503,10 @@
             npcGroup.rotation.y = Math.atan2(cx - nx, cz - nz);
           }
           scene.add(npcGroup);
-          const setup = setupKayKitChar(look.glb, npcGroup, null, look.scale);
+          const setup = look.modelFactory(npcGroup, look.scale);
           _applyTint(npcGroup, look.tint);
-          _attachOutfit(npcGroup, look.outfit);
-          _attachAccent(npcGroup, look.accent);
+          _attachOutfit(npcGroup, look.outfit, look.scale);
+          _attachAccent(npcGroup, look.accent, look.scale);
 
           const speaker = String(member.name || `Stranger ${idx + 1}`);
           const rawLines = Array.isArray(member.dialogue) ? member.dialogue : ['Hello there.'];
@@ -3271,7 +3518,7 @@
             end: i === safeLines.length - 1,
           }));
 
-          const id = `${region.id}:cast-${idx}`;
+          const id = `${region.id}:${idPrefix}-${idx}`;
           const prev = savedNpcs.find((n) => n && n.id === id);
           npcs.push({
             id,
@@ -3323,6 +3570,18 @@
         if (r.vignette && buildMultiNpcScene) {
           buildSetPieces(r, r.vignette);
           buildMultiNpcScene(r, r.vignette, savedState);
+          // Replay any previously-unlocked extensions so their NPCs + set
+          // pieces reappear after reload. Clear the id list first so
+          // extendRegionWithExtension doesn't skip them as already-applied.
+          if (Array.isArray(r.unlockedExtensionIds) && r.unlockedExtensionIds.length &&
+              Array.isArray(r.vignette.extensions)) {
+            const toReplay = r.unlockedExtensionIds.slice();
+            r.unlockedExtensionIds = [];
+            for (const extId of toReplay) {
+              const ext = r.vignette.extensions.find((e) => e && e.id === extId);
+              if (ext) extendRegionWithExtension(r, ext);
+            }
+          }
         } else if (r.template && r.template.build) {
           r.template.build(r, savedState);
         }

@@ -1,7 +1,8 @@
 [
   {
-    "match": ["electric", "lightning", "edison", "tesla", "current", "wire", "bulb", "circuit"],
+    "match": ["electric", "lightning", "edison", "tesla", "current", "wire", "bulb", "circuit", "battery", "volta", "thunder", "storm", "spark", "conductor"],
     "vignette": {
+      "concept_id": "electricity",
       "region_name": "Edison's Workshop",
       "family": "earthen",
       "terrain": [
@@ -73,12 +74,112 @@
             "Every big idea starts with someone brave enough to ask: what IS that, really?"
           ]
         }
+      ],
+      "extensions": [
+        {
+          "id": "elec_battery",
+          "keywords": ["battery", "batteries", "volta", "store", "charge"],
+          "set_pieces": [
+            { "type": "pillar",  "position": { "angleDeg": 60, "radius": 7 }, "scale": [0.32, 0.7, 0.32], "color": 3421511 },
+            { "type": "pillar",  "position": { "angleDeg": 60, "radius": 7 }, "y": 0.75, "scale": [0.34, 0.2, 0.34], "color": 13421772 },
+            { "type": "pillar",  "position": { "angleDeg": 60, "radius": 7 }, "y": 0.98, "scale": [0.32, 0.7, 0.32], "color": 12017488 },
+            { "type": "pillar",  "position": { "angleDeg": 60, "radius": 7 }, "y": 1.71, "scale": [0.34, 0.2, 0.34], "color": 13421772 },
+            { "type": "glow_orb", "position": { "angleDeg": 60, "radius": 7 }, "y": 2.1, "scale": 0.18, "color": 11197695, "intensity": 0.9 }
+          ],
+          "cast": [
+            {
+              "name": "Alessandro Volta",
+              "role_short": "battery inventor",
+              "position": { "angleDeg": 75, "radius": 6 },
+              "appearance": {
+                "costume": "scientist", "tint": 14211232,
+                "outfit": [
+                  { "kind": "lab_coat", "color": 15197676 },
+                  { "kind": "goggles", "color": 3815448, "lensColor": 16770730 }
+                ]
+              },
+              "dialogue": [
+                "Ciao! I'm Alessandro. I made the first battery — a long time ago in Italy.",
+                "A battery stores electricity so you can carry it around in your pocket.",
+                "Inside my first one, I stacked zinc and copper discs with salty paper between them.",
+                "That little sandwich makes electrons flow — like water pressing down a hill.",
+                "Every phone, every flashlight, every toy with a button — they all owe a thank-you to this stack of metal."
+              ]
+            }
+          ]
+        },
+        {
+          "id": "elec_storm",
+          "keywords": ["storm", "thunder", "lightning", "sky", "weather", "cloud"],
+          "set_pieces": [
+            { "type": "crystal", "position": { "angleDeg": 145, "radius": 7 }, "y": 3.4, "scale": 0.5, "color": 11197695, "glow": true },
+            { "type": "crystal", "position": { "angleDeg": 135, "radius": 7.5 }, "y": 3.0, "scale": 0.3, "color": 16777164, "glow": true },
+            { "type": "crystal", "position": { "angleDeg": 155, "radius": 7.5 }, "y": 2.8, "scale": 0.35, "color": 16777164, "glow": true },
+            { "type": "glow_orb", "position": { "angleDeg": 145, "radius": 7 }, "y": 4.2, "scale": 0.22, "color": 16777164, "intensity": 1.3 }
+          ],
+          "cast": [
+            {
+              "name": "Zira",
+              "role_short": "storm sprite",
+              "position": { "angleDeg": 145, "radius": 6 },
+              "appearance": {
+                "model": "base", "tint": 12500670, "scale": 0.95,
+                "outfit": [
+                  { "kind": "pointed_hat", "color": 3815448 },
+                  { "kind": "cape", "color": 3815448 }
+                ],
+                "accent": { "type": "glow", "color": 11197695 }
+              },
+              "dialogue": [
+                "Crackle-flash! Hello, little one. I'm Zira. Storms are my home.",
+                "Lightning is electricity TOO — just a LOT of it, all at once, between a cloud and the ground.",
+                "A bolt is hotter than the surface of the sun. Really. I counted.",
+                "Thunder is the sound of air being pushed so hard so fast it BOOMS.",
+                "When you see a flash and then hear the boom — count the seconds. That's how far away I danced."
+              ]
+            }
+          ]
+        },
+        {
+          "id": "elec_conductor",
+          "keywords": ["wire", "conductor", "insulator", "copper", "metal", "rubber"],
+          "set_pieces": [
+            { "type": "mound",  "position": { "angleDeg": 280, "radius": 6 }, "scale": 0.5, "color": 12088115 },
+            { "type": "crystal", "position": { "angleDeg": 285, "radius": 6.4 }, "y": 0.3, "scale": 0.28, "color": 12088115 },
+            { "type": "crystal", "position": { "angleDeg": 275, "radius": 6.4 }, "y": 0.3, "scale": 0.22, "color": 12088115 },
+            { "type": "slab",   "position": { "angleDeg": 280, "radius": 7 }, "scale": [1.4, 0.15, 0.8], "color": 3355442 }
+          ],
+          "cast": [
+            {
+              "name": "Patti the Wireworker",
+              "role_short": "apprentice",
+              "position": { "angleDeg": 290, "radius": 6.5 },
+              "appearance": {
+                "costume": "inventor", "tint": 14934190,
+                "outfit": [
+                  { "kind": "goggles", "color": 3815448, "lensColor": 16762775 },
+                  { "kind": "tool", "color": 6308875, "headColor": 12088115, "side": "left" },
+                  { "kind": "satchel", "color": 4209472, "side": "right" }
+                ]
+              },
+              "dialogue": [
+                "Hi! I'm Patti. I help Mr. Edison — I wind wires and sort parts.",
+                "Not everything lets electricity flow. Metal does. Rubber doesn't.",
+                "We call the good ones CONDUCTORS — copper is our favorite.",
+                "And the blockers are INSULATORS — rubber around a wire keeps the electricity from zapping your hand.",
+                "Your house is full of both: copper inside, rubber on the outside. Teamwork!"
+              ]
+            }
+          ]
+        }
       ]
     }
   },
   {
     "match": ["ocean", "sea", "wave", "fish", "whale", "dolphin", "shark", "tide", "marine"],
     "vignette": {
+      "concept_id": "ocean",
+      "extensions": [],
       "region_name": "The Tide Pool",
       "family": "watery",
       "terrain": [
@@ -147,6 +248,8 @@
   {
     "match": ["volcano", "lava", "magma", "eruption", "pele"],
     "vignette": {
+      "concept_id": "volcano",
+      "extensions": [],
       "region_name": "Volcano's Edge",
       "family": "earthen",
       "terrain": [
@@ -223,6 +326,8 @@
   {
     "match": ["dinosaur", "fossil", "trex", "rex", "prehistoric", "paleontolog", "jurassic"],
     "vignette": {
+      "concept_id": "dinosaurs",
+      "extensions": [],
       "region_name": "The Bone Quarry",
       "family": "earthen",
       "terrain": [
@@ -289,6 +394,8 @@
   {
     "match": ["space", "planet", "star", "moon", "galaxy", "rocket", "astronaut", "orbit", "cosmos"],
     "vignette": {
+      "concept_id": "space",
+      "extensions": [],
       "region_name": "Stargazer's Hill",
       "family": "airy",
       "terrain": [
