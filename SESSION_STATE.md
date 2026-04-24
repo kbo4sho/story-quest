@@ -1,14 +1,29 @@
 # Session State — 2026-04-22 (late)
 
-## Read the plan before coding
+## Read the plans before coding
 
-The project pivoted direction today. **Open `GARDEN_PLAN.md` first.** It
-replaces the W5+ ambition from WORLD_PLAN.md. The runtime is still what's
-in `world/index.html`, and `SUBSTRATE_PLAN.md` is still the storage
-model, but the *experience shape* is now exploration-first with hidden
-things + affordances + a worldtender that evolves the world between
-sessions. Stop thinking of vignettes as delivered-text tableaux; they
-are designed spaces that teach by letting the kid fiddle.
+The project pivoted today. Three plan docs now sit on top of each other,
+each owning a different layer:
+
+1. **`DESIGNER_AGENT_PLAN.md`** — the **authoring layer**. A long-
+   running LLM agent that makes each concept world continuously better
+   via generate/evaluate/iterate passes against a rubric. Supply side.
+   This is the north star for what the LLM's actual job is.
+2. **`GARDEN_PLAN.md`** — the **player experience layer**. What
+   exploration feels like, the affordance + hidden + thread + journal
+   primitives, the interaction model on tablet. Demand side. The Garden's
+   primitives are what the Designer Agent composes with.
+3. **`SUBSTRATE_PLAN.md`** — the **storage model**. Per-concept canon
+   directories, versioned entities, cross-kid substrate as a future
+   layer. The canon is the API boundary between the authoring agent and
+   the player layer.
+
+`WORLD_PLAN.md` W5+ (dialogue-factory vignettes) is retired.
+`FACTORY_PLAN.md` retained as architectural reference.
+
+The worldtender concept from the early Garden draft was too modest and
+is **retired** in favor of the Designer Agent. The worldtender was
+decorative; the agent is authorial.
 
 Phase 0a (concept accretion) *did* land today for all 5 concepts (3
 extensions for electricity, 2 each for ocean/volcano/dinosaurs/space),

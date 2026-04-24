@@ -76,23 +76,25 @@ about electric eels." LLM-authorable; worldtender-evaluable. Threads
 don't announce themselves — the kid just notices that Zira said
 something different this time.
 
-### 7. The worldtender
-An offline process that makes small changes to world state when the kid
-isn't playing. Runs at session-start if ≥ N hours since last session
-(single-player local doesn't need continuous uptime). Each tend makes
-1–3 small, authored-feeling changes — drawn from a menu of templates
-plus occasional LLM-composed novelties:
+### 7. The authoring agent (see DESIGNER_AGENT_PLAN.md)
+The earlier "worldtender" framing of this pillar was too modest. The
+actual authoring layer is a **self-improving designer agent** that runs
+continuously in the background, making each concept world genuinely
+deeper and more interesting over time. Kids never see it; they unlock
+parts of the world it has been polishing.
 
-- An NPC has drifted to a neighboring region for the day
-- A new note has been pinned to a tree
-- Weather has changed (fog, rain, dawn light)
-- An item has moved
-- A new path has worn itself into the grass between two spots the kid
-  visited a lot
-- A locked door is now unlocked
-- A stranger has set up a tent
+See `DESIGNER_AGENT_PLAN.md` for the full authoring-side design
+(generate / evaluate / iterate passes, canon shape, rubric, autonomy
+progression). The primitives defined in this Garden Plan — affordances,
+hidden discoveries, threads, signs, inventory — are what the agent
+composes with.
 
-The worldtender is the long-arc magic. It's how the garden grows.
+The worldtender, as originally framed (small ambient changes to the
+kid's personal state), is no longer a separate concept. The kid's
+personal state still evolves (footprints wear into their terrain, their
+journal fills, items move around their bag), but that's incidental
+state, not authored content. All authored content lives in the
+shared canon the Designer Agent tends.
 
 ## The LLM's new job
 
