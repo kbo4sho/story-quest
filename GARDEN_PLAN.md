@@ -227,17 +227,44 @@ Later asks about ocean, meets the anglerfish with the new line. Delight:
 - **FACTORY_PLAN.md** — retained architecturally. The schema/validator
   ideas still apply; the schema itself changes per above.
 
-## Open design questions
+## Decisions locked 2026-04-22
 
-- How does interaction actually work on tablet? Tap to approach, second
-  tap to interact? Or: auto-interact when close and pointing?
+- **Interaction model (tablet, 9yo).** Tap the object → Finn
+  auto-walks to it → a small contextual prompt appears near the object
+  ("pull lever" / "read note" / "pick up") → second tap confirms.
+  Respects agency (you *chose* to interact), impossible to trigger
+  accidentally, gives a beat to change your mind. Same pattern as A
+  Short Hike / modern mobile adventures.
+- **Journal presentation.** A physical in-world notebook Finn
+  carries. Tap the book icon (bottom-right of the HUD) → it flips open
+  into an overlay with tabbed pages (**Places / Friends / Bag / Words
+  / Mysteries**). Reinforces "this is *your* record" better than a flat
+  menu, and the tab structure scales cleanly as we add new kinds of
+  entries.
+- **Item consumption.** **Always recoverable.** Items placed in
+  affordances stay in the bag. Wrong slot ≠ lost item. At 9 the lesson
+  we want is "curiosity costs nothing." Weight + consequence come from
+  what the kid *notices*, not what they *lose*. Where a choice needs to
+  feel meaningful, gate it behind a thread, not behind item loss.
+- **Worldtender first move.** A new NPC wanders between regions
+  overnight, leaving a footprint trail the kid can follow. The NPC is
+  somewhere new when they log back in — maybe the stranger is leaning
+  against the Tesla coil, maybe perched on the volcano lookout. Short,
+  warm, "world noticed you were gone" moment. This is the template to
+  prototype first once G0 is in.
+
+## Still open
+
 - What's the ratio of NPC dialogue to environmental teaching? G0 guess:
   30/70. Tune after play-testing.
-- Should the kid be able to drop items? Probably yes — creates accidental
-  tender fodder ("someone left a feather here").
-- Worldtender budget. For local single-player, 1–3 Claude calls per tend
-  is cheap. What does it actually *do* each tend? We'll need a menu of
-  change templates; pure LLM "surprise me" is too chaotic.
-- Journal readability. Auto-extracted vocab is easy for fixed strings
-  but hard for LLM output. Maybe: only count words the kid *saw on a
-  readable sign*, not spoken dialogue. Signs become the vocab surface.
+- Should the kid be able to drop items (not just use them)? Probably
+  yes — creates accidental tender fodder ("someone left a feather
+  here").
+- Worldtender change-template menu. Besides the wandering-NPC
+  template above: new note pinned, weather change, path worn between
+  frequented spots, locked door now open, stranger's tent. Which ones
+  make the cut?
+- Journal readability / vocab tracking. Auto-extract vocab from
+  *signs* the kid walked close enough to read — not from spoken
+  dialogue. Signs become the vocab surface on purpose. Needs a
+  sign-primitive in the affordance library.
