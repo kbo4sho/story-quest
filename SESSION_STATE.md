@@ -1,6 +1,26 @@
-# Session State — 2026-04-21 (late)
+# Session State — 2026-04-22 (late)
 
-## TOMORROW START HERE — broken: outfit primitives floating off the NPC
+## Read the plan before coding
+
+The project pivoted direction today. **Open `GARDEN_PLAN.md` first.** It
+replaces the W5+ ambition from WORLD_PLAN.md. The runtime is still what's
+in `world/index.html`, and `SUBSTRATE_PLAN.md` is still the storage
+model, but the *experience shape* is now exploration-first with hidden
+things + affordances + a worldtender that evolves the world between
+sessions. Stop thinking of vignettes as delivered-text tableaux; they
+are designed spaces that teach by letting the kid fiddle.
+
+Phase 0a (concept accretion) *did* land today for all 5 concepts (3
+extensions for electricity, 2 each for ocean/volcano/dinosaurs/space),
+and the runtime plumbing is in place. That work remains useful — the
+Garden will keep the concept-keyed vignette file as its canon store —
+but the next coding step is **Phase G0** from GARDEN_PLAN.md, not more
+extensions. G0 adds affordances + hidden items + a journal to Edison's
+Workshop, end-to-end, as proof of the new shape.
+
+## TOMORROW START HERE — old note, mostly resolved
+
+Yesterday: outfit primitives floating off the NPC
 
 A screenshot from the user shows Dr. Kai's wide-brim hat + lab coat hanging in the air with no character under them. The outfit pieces are added to the npcGroup at hardcoded local-y positions (1.95 for hats, 1.28 for collars) tuned for a knight/wren-sized character — but `setupKayKitChar` calls `groupTarget.remove(groupTarget.children[0])` to wipe before adding the GLB (line ~2584), and the GLB's pivot may not be at feet=0. Also: `MODEL_HEAD_Y` is currently a constant assumption; it doesn't account for character GLBs of different actual heights, scale variants, or the chunk-relative y of the npcGroup.
 

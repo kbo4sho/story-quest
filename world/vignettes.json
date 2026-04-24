@@ -179,7 +179,73 @@
     "match": ["ocean", "sea", "wave", "fish", "whale", "dolphin", "shark", "tide", "marine"],
     "vignette": {
       "concept_id": "ocean",
-      "extensions": [],
+      "extensions": [
+        {
+          "id": "ocean_deep",
+          "keywords": ["deep", "abyss", "submarine", "angler", "dark", "trench", "bottom"],
+          "set_pieces": [
+            { "type": "pool",     "position": { "angleDeg": 280, "radius": 7 }, "scale": 2.2, "color": 1056060, "opacity": 0.95 },
+            { "type": "glow_orb", "position": { "angleDeg": 275, "radius": 7 }, "y": 0.6, "scale": 0.14, "color": 9961471, "intensity": 1.2 },
+            { "type": "glow_orb", "position": { "angleDeg": 285, "radius": 7.5 }, "y": 0.3, "scale": 0.12, "color": 16770730, "intensity": 1.3 },
+            { "type": "crystal",  "position": { "angleDeg": 280, "radius": 7 }, "y": 0.4, "scale": 0.3, "color": 4297779, "glow": true }
+          ],
+          "cast": [
+            {
+              "name": "Captain Nila",
+              "role_short": "deep-sea explorer",
+              "position": { "angleDeg": 280, "radius": 5.5 },
+              "appearance": {
+                "model": "base", "tint": 15132410, "scale": 1.0,
+                "outfit": [
+                  { "kind": "helmet_sphere", "color": 15132410, "opacity": 0.5 },
+                  { "kind": "backpack", "color": 4559219, "tankColor": 12632256 }
+                ],
+                "accent": { "type": "glow", "color": 9961471 }
+              },
+              "dialogue": [
+                "Blub-blub! Hello. I'm Captain Nila. I dive to the bottom of the sea in a tiny submarine.",
+                "The deep ocean is DARK — no sunlight reaches that far. But there's still life down there.",
+                "Some fish make their own light! A little glowing dot on their heads to attract dinner.",
+                "It is colder than a winter morning, and the pressure would squish you flat without a strong suit.",
+                "The deep sea is Earth's last unexplored frontier. More people have been to space."
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ocean_reef",
+          "keywords": ["coral", "reef", "crab", "colorful", "anemone", "clownfish"],
+          "set_pieces": [
+            { "type": "mound",  "position": { "angleDeg": 40, "radius": 8 }, "scale": 0.7, "color": 15761536 },
+            { "type": "mound",  "position": { "angleDeg": 50, "radius": 8.5 }, "scale": 0.5, "color": 16429088 },
+            { "type": "mound",  "position": { "angleDeg": 30, "radius": 8.3 }, "scale": 0.55, "color": 11250603 },
+            { "type": "crystal", "position": { "angleDeg": 42, "radius": 8.2 }, "y": 0.6, "scale": 0.25, "color": 16742552, "glow": true },
+            { "type": "pillar", "position": { "angleDeg": 38, "radius": 7.7 }, "scale": [0.08, 0.9, 0.08], "color": 16500832 }
+          ],
+          "cast": [
+            {
+              "name": "Reef",
+              "role_short": "coral guardian",
+              "position": { "angleDeg": 45, "radius": 6.5 },
+              "appearance": {
+                "model": "base", "tint": 16742552, "scale": 0.9,
+                "outfit": [
+                  { "kind": "crown", "color": 16429088 },
+                  { "kind": "cape", "color": 15761536 }
+                ],
+                "accent": { "type": "glow", "color": 16742552 }
+              },
+              "dialogue": [
+                "Oh, a visitor! I'm Reef. I watch over the coral gardens.",
+                "Coral looks like a rock, but it's ALIVE — tiny animals called polyps built every piece, one by one.",
+                "A reef is a whole city underwater. Fish, crabs, eels, octopuses — thousands of neighbors.",
+                "When the water gets too warm, corals turn white and get sick. We have to be gentle with the ocean.",
+                "Swim slowly. Touch nothing. The reef sees you."
+              ]
+            }
+          ]
+        }
+      ],
       "region_name": "The Tide Pool",
       "family": "watery",
       "terrain": [
@@ -249,7 +315,71 @@
     "match": ["volcano", "lava", "magma", "eruption", "pele"],
     "vignette": {
       "concept_id": "volcano",
-      "extensions": [],
+      "extensions": [
+        {
+          "id": "volc_island",
+          "keywords": ["island", "hawaii", "pacific", "chain", "archipelago"],
+          "set_pieces": [
+            { "type": "dome",     "position": { "angleDeg": 340, "radius": 8 }, "scale": 1.0, "color": 5978688 },
+            { "type": "mound",    "position": { "angleDeg": 340, "radius": 8 }, "y": 0.5, "scale": 0.7, "color": 7686191 },
+            { "type": "pool",     "position": { "angleDeg": 340, "radius": 10 }, "scale": 1.6, "color": 4044706, "opacity": 0.8 },
+            { "type": "pillar",   "position": { "angleDeg": 340, "radius": 7.6 }, "y": 1.2, "scale": [0.08, 1.2, 0.08], "color": 4297779 }
+          ],
+          "cast": [
+            {
+              "name": "Professor Oli",
+              "role_short": "island geologist",
+              "position": { "angleDeg": 340, "radius": 6.5 },
+              "appearance": {
+                "costume": "scientist", "tint": 15654830,
+                "outfit": [
+                  { "kind": "lab_coat", "color": 15916536 },
+                  { "kind": "wide_brim_hat", "color": 7686191, "bandColor": 4402756 },
+                  { "kind": "tool", "color": 6308875, "headColor": 6118749, "side": "right" }
+                ]
+              },
+              "dialogue": [
+                "Aloha! I'm Professor Oli. I study how volcanoes BUILD land.",
+                "Every island in Hawaii started as a volcano under the sea.",
+                "Hot lava poured out for thousands of years, piling up bit by bit, until it broke the surface.",
+                "The oldest islands are farthest away, because the sea floor slowly slides past the hot spot.",
+                "A new island is being born right now, south of Hawaii. Underwater. Nobody has ever walked on it."
+              ]
+            }
+          ]
+        },
+        {
+          "id": "volc_geyser",
+          "keywords": ["geyser", "steam", "hot spring", "yellowstone", "boil", "fountain"],
+          "set_pieces": [
+            { "type": "pool",     "position": { "angleDeg": 40, "radius": 8 }, "scale": 1.5, "color": 4306860, "opacity": 0.8 },
+            { "type": "pillar",   "position": { "angleDeg": 40, "radius": 8 }, "y": 0.3, "scale": [0.5, 3.5, 0.5], "color": 15066597 },
+            { "type": "pillar",   "position": { "angleDeg": 44, "radius": 8.5 }, "y": 0.3, "scale": [0.3, 2.5, 0.3], "color": 15066597 },
+            { "type": "mound",    "position": { "angleDeg": 38, "radius": 9 }, "scale": 0.4, "color": 11184930 }
+          ],
+          "cast": [
+            {
+              "name": "Ranger Hollis",
+              "role_short": "geyser ranger",
+              "position": { "angleDeg": 40, "radius": 6.5 },
+              "appearance": {
+                "costume": "explorer", "tint": 13158484,
+                "outfit": [
+                  { "kind": "wide_brim_hat", "color": 6308875, "bandColor": 16762775 },
+                  { "kind": "satchel", "color": 6308875, "side": "right" }
+                ]
+              },
+              "dialogue": [
+                "Howdy! I'm Ranger Hollis. Welcome to geyser country.",
+                "A geyser is a fountain of boiling water that shoots out of the ground — sometimes taller than a tree!",
+                "Deep underground, hot volcano rock heats water inside narrow caves.",
+                "The pressure builds and builds until — WHOOSH — the water blasts up into the sky as steam.",
+                "Then the cave fills with cold water again, and the whole show repeats. Some geysers are as reliable as a clock."
+              ]
+            }
+          ]
+        }
+      ],
       "region_name": "Volcano's Edge",
       "family": "earthen",
       "terrain": [
@@ -327,7 +457,67 @@
     "match": ["dinosaur", "fossil", "trex", "rex", "prehistoric", "paleontolog", "jurassic"],
     "vignette": {
       "concept_id": "dinosaurs",
-      "extensions": [],
+      "extensions": [
+        {
+          "id": "dino_extinction",
+          "keywords": ["extinction", "asteroid", "meteor", "comet", "died", "ended", "gone", "impact"],
+          "set_pieces": [
+            { "type": "mound",   "position": { "angleDeg": 130, "radius": 8 }, "scale": 1.3, "color": 3421511 },
+            { "type": "crystal", "position": { "angleDeg": 130, "radius": 8 }, "y": 1.2, "scale": 0.6, "color": 16738101, "glow": true },
+            { "type": "glow_orb", "position": { "angleDeg": 130, "radius": 8 }, "y": 2.5, "scale": 0.3, "color": 16762775, "intensity": 1.4 },
+            { "type": "pit",     "position": { "angleDeg": 130, "radius": 8 }, "radius": 2.5, "depth": 0.6 }
+          ],
+          "cast": [
+            {
+              "name": "Dr. Alvarez",
+              "role_short": "impact scientist",
+              "position": { "angleDeg": 120, "radius": 6 },
+              "appearance": {
+                "costume": "scientist", "tint": 15197415,
+                "outfit": [
+                  { "kind": "lab_coat", "color": 15921906 },
+                  { "kind": "goggles", "color": 3815448, "lensColor": 16762775 }
+                ]
+              },
+              "dialogue": [
+                "Hello! I'm Dr. Alvarez. I study what ENDED the dinosaurs.",
+                "Sixty-six million years ago, a rock from space as big as a city crashed into Earth.",
+                "The crash made a fiery cloud that circled the whole planet and blocked out the sun for years.",
+                "No sun means no plants. No plants means no plant-eaters. No plant-eaters means no T-rex.",
+                "Three-quarters of all life disappeared. But some tiny, fuzzy survivors eventually became — us."
+              ]
+            }
+          ]
+        },
+        {
+          "id": "dino_feathers",
+          "keywords": ["feathers", "bird", "raptor", "velociraptor", "chicken", "colorful", "fluffy"],
+          "set_pieces": [
+            { "type": "crystal", "position": { "angleDeg": 330, "radius": 7 }, "y": 0.8, "scale": 0.28, "color": 14426112, "glow": true },
+            { "type": "crystal", "position": { "angleDeg": 325, "radius": 7.4 }, "y": 0.5, "scale": 0.25, "color": 11829248, "glow": true },
+            { "type": "crystal", "position": { "angleDeg": 335, "radius": 7.4 }, "y": 0.6, "scale": 0.22, "color": 1610815, "glow": true },
+            { "type": "mound",   "position": { "angleDeg": 330, "radius": 7 }, "scale": 0.5, "color": 14426112 }
+          ],
+          "cast": [
+            {
+              "name": "Feather",
+              "role_short": "young raptor",
+              "position": { "angleDeg": 330, "radius": 6 },
+              "appearance": {
+                "model": "frog", "tint": 14426112, "scale": 0.9,
+                "accent": { "type": "halo", "color": 16762775 }
+              },
+              "dialogue": [
+                "Squawk! Hi! I'm Feather. I'm a little raptor.",
+                "Yes, I have FEATHERS. Not scales. Not skin. Real colorful feathers — like a bird.",
+                "For a long time, people thought all dinosaurs looked like big lizards. They were wrong!",
+                "Scientists found fossils with feather prints. Tiny, fuzzy ones — and big flashy ones for showing off.",
+                "Birds today ARE dinosaurs. Every sparrow is my great-great-great-great-great-grand-cousin."
+              ]
+            }
+          ]
+        }
+      ],
       "region_name": "The Bone Quarry",
       "family": "earthen",
       "terrain": [
@@ -395,7 +585,74 @@
     "match": ["space", "planet", "star", "moon", "galaxy", "rocket", "astronaut", "orbit", "cosmos"],
     "vignette": {
       "concept_id": "space",
-      "extensions": [],
+      "extensions": [
+        {
+          "id": "space_moon",
+          "keywords": ["moon", "apollo", "lunar", "armstrong", "landing", "tranquility"],
+          "set_pieces": [
+            { "type": "slab",   "position": { "angleDeg": 290, "radius": 7 }, "scale": [1.4, 0.3, 1.4], "color": 11250603 },
+            { "type": "pillar", "position": { "angleDeg": 290, "radius": 7 }, "y": 0.3, "scale": [0.5, 1.0, 0.5], "color": 13421772 },
+            { "type": "mound",  "position": { "angleDeg": 290, "radius": 7 }, "y": 1.3, "scale": 0.35, "color": 14606046 },
+            { "type": "flag",   "position": { "angleDeg": 295, "radius": 7.5 }, "scale": 2.0, "color": 14423100 },
+            { "type": "mound",  "position": { "angleDeg": 285, "radius": 8 }, "scale": 0.3, "color": 11250603 },
+            { "type": "mound",  "position": { "angleDeg": 293, "radius": 8.2 }, "scale": 0.35, "color": 11250603 }
+          ],
+          "cast": [
+            {
+              "name": "Neil",
+              "role_short": "moon walker",
+              "position": { "angleDeg": 290, "radius": 5.5 },
+              "appearance": {
+                "costume": "astronaut", "tint": 16053748,
+                "outfit": [
+                  { "kind": "helmet_sphere", "color": 16579836, "opacity": 0.5 },
+                  { "kind": "backpack", "color": 14869218, "tankColor": 11184810 }
+                ]
+              },
+              "dialogue": [
+                "Hello there. I'm Neil. In 1969, I was one of the first people to walk on the Moon.",
+                "The Moon is a ball of rock about a quarter as wide as Earth, going around us once a month.",
+                "Up there, there's no air, no weather, no wind — my footprint is still there, unmoved.",
+                "Gravity is weaker, so I could jump six times higher than on Earth. It felt like floating.",
+                "When I looked back, Earth was a tiny blue marble. I realized how precious and small our home is."
+              ]
+            }
+          ]
+        },
+        {
+          "id": "space_blackhole",
+          "keywords": ["black hole", "gravity", "einstein", "pull", "singularity", "event horizon"],
+          "set_pieces": [
+            { "type": "crystal",  "position": { "angleDeg": 120, "radius": 7 }, "y": 1.5, "scale": 0.6, "color": 394809, "glow": false },
+            { "type": "glow_orb", "position": { "angleDeg": 116, "radius": 7.4 }, "y": 1.5, "scale": 0.14, "color": 13388289, "intensity": 1.3 },
+            { "type": "glow_orb", "position": { "angleDeg": 124, "radius": 7.4 }, "y": 1.5, "scale": 0.14, "color": 16762775, "intensity": 1.3 },
+            { "type": "glow_orb", "position": { "angleDeg": 120, "radius": 7.6 }, "y": 1.9, "scale": 0.12, "color": 11197695, "intensity": 1.1 },
+            { "type": "glow_orb", "position": { "angleDeg": 120, "radius": 6.4 }, "y": 1.1, "scale": 0.12, "color": 16734260, "intensity": 1.1 }
+          ],
+          "cast": [
+            {
+              "name": "Albert",
+              "role_short": "physicist",
+              "position": { "angleDeg": 120, "radius": 5.5 },
+              "appearance": {
+                "model": "base", "tint": 14084591, "scale": 1.02,
+                "outfit": [
+                  { "kind": "lab_coat", "color": 13816530 },
+                  { "kind": "goggles", "color": 3815448, "lensColor": 16777164 }
+                ],
+                "accent": { "type": "glow", "color": 11197695 }
+              },
+              "dialogue": [
+                "Guten Tag! I am Albert. I spent my life thinking about the strangest thing in space — gravity.",
+                "Every big thing pulls on every other big thing. The Earth pulls you, and you pull the Earth back.",
+                "A black hole is an object so heavy that NOTHING can escape its pull. Not even light.",
+                "If you could somehow peek inside, time would stretch and squish. Space bends like a trampoline with a bowling ball on it.",
+                "There's a huge one at the center of our galaxy. And yet — we are here, safe, floating around a gentle star. Isn't the universe wonderful?"
+              ]
+            }
+          ]
+        }
+      ],
       "region_name": "Stargazer's Hill",
       "family": "airy",
       "terrain": [
